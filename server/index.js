@@ -66,6 +66,12 @@ function authRequired(req, res, next) {
   next();
 }
 
+function adminRequired(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Please sign in to continue.' });
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access is required.' });
+  next();
+}
+
 function assertCollection(name) {
   return COLLECTIONS.includes(name);
 }
@@ -138,6 +144,8 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const patientId = body.patientId || (role === 'patient' ? `AVP${Math.floor(100000 + Math.random() * 900000)}` : undefined);
+    const doctorId = role === 'doctor' ? makeId('DOC') : undefined;
+    const hospitalId = role === 'hospital' ? makeId('HOSP') : undefined;
     const user = await db.createUser({
       id: makeId('USR'),
       role,
@@ -148,6 +156,8 @@ app.post('/api/auth/register', async (req, res) => {
       data: {
         ...safeBody,
         patientId,
+        doctorId,
+        hospitalId,
         displayName: name.split(' ')[0] + (name.split(' ')[1] ? ` ${name.split(' ')[1][0]}.` : ''),
         image: body.photoUrl || body.image || '/src/assets/images/patient_avatar_1787229395408.jpg',
       },
@@ -166,7 +176,7 @@ app.post('/api/auth/register', async (req, res) => {
       });
     } else if (role === 'doctor') {
       await db.create('doctors', {
-        id: makeId('DOC'),
+        id: doctorId,
         name: name.startsWith('Dr') ? name : `Dr. ${name}`,
         speciality: body.speciality || 'General Medicine',
         qualifications: body.qualification || 'MBBS',
@@ -184,7 +194,7 @@ app.post('/api/auth/register', async (req, res) => {
       });
     } else if (role === 'hospital') {
       await db.create('hospitals', {
-        id: makeId('HOSP'),
+        id: hospitalId,
         name: body.hospitalName || name,
         shortName: body.hospitalName || name,
         district: body.district || 'Warangal',
@@ -267,6 +277,61 @@ app.get('/api/bootstrap', async (_req, res) => {
 
 app.get('/api/stats', async (_req, res) => {
   res.json({ mode: db.mode(), postgres: db.postgresReady(), ...(await db.counts()) });
+});
+
+app.get('/api/users', adminRequired, async (req, res) => {
+  const { page, limit, ...filter } = req.query;
+  const users = await db.listUsers(filter);
+  res.json({ items: users });
+});
+
+app.post('/api/users', adminRequired, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const role = body.role || 'patient';
+    const name = body.name || body.fullName || body.hospitalName || 'New User';
+    const email = body.email || body.contactEmail || '';
+    const phone = body.phone || body.mobile || body.mobileNumber || body.contactPhone || '';
+    const password = String(body.password || 'Password@123');
+    const user = await db.createUser({
+      id: makeId('USR'),
+      role,
+      name,
+      email: email || null,
+      phone: phone || null,
+      password_hash: hashPassword(password),
+      data: {
+        ...body,
+        displayName: body.displayName || name,
+        status: body.status || 'Active',
+      },
+    });
+    res.status(201).json({ item: user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'User creation failed.' });
+  }
+});
+
+app.patch('/api/users/:id', adminRequired, async (req, res) => {
+  const patch = { ...(req.body || {}) };
+  if (patch.password) {
+    patch.password_hash = hashPassword(String(patch.password));
+    delete patch.password;
+  }
+  delete patch.confirmPassword;
+  const user = await db.updateUser(req.params.id, patch);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  res.json({ item: user });
+});
+
+app.delete('/api/users/:id', adminRequired, async (req, res) => {
+  if (req.user?.id === req.params.id) {
+    return res.status(400).json({ error: 'You cannot delete your own admin account while signed in.' });
+  }
+  const user = await db.removeUser(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  res.json({ ok: true });
 });
 
 app.get('/api/records/:collection', async (req, res) => {
