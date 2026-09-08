@@ -49,8 +49,8 @@ export const WidgetsSection: React.FC<WidgetsSectionProps> = ({ onOpenModal, onS
   ];
 
   return (
-    <section className="py-8 px-4 sm:px-8 bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <section className="py-8 px-4 sm:px-8 lg:px-14 bg-white border-b border-slate-200">
+      <div className="w-full space-y-8">
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           

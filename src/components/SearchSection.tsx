@@ -52,8 +52,8 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSearchSubmit, on
     : Object.values(LOCATIONS_BY_DISTRICT).flat();
 
   return (
-    <div id="section-search" className="bg-[#0b1b3d] text-white py-4 px-4 sm:px-8 border-y-2 border-amber-500 shadow-md">
-      <div className="max-w-7xl mx-auto space-y-3">
+    <div id="section-search" className="bg-[#0b1b3d] text-white py-4 px-4 sm:px-8 lg:px-14 border-y-2 border-amber-500 shadow-md">
+      <div className="w-full space-y-3">
         
         {/* Title */}
         <div className="text-center">
@@ -82,7 +82,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSearchSubmit, on
               <option value="Health Camp">Health Camp</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-              ▼
+              v
             </div>
           </div>
 
@@ -99,7 +99,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSearchSubmit, on
               ))}
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-              ▼
+              v
             </div>
           </div>
 
@@ -119,7 +119,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSearchSubmit, on
               ))}
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-              ▼
+              v
             </div>
           </div>
 
@@ -136,7 +136,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSearchSubmit, on
               ))}
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-              ▼
+              v
             </div>
           </div>
 
