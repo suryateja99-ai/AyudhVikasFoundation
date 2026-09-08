@@ -1,0 +1,6 @@
+{
+  "name": "Ayudh Vikas Foundation",
+  "description": "Ayudh Vikas Foundation Healthcare Network - One Call for Complete Healthcare Support",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

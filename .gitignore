@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+server/local-data.json
+vendor
+npm-install.log
+*.log
+.DS_Store

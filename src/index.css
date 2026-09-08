@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .geo-border-r {
+    border-right: 1px solid #e5e7eb;
+  }
+  .geo-border-b {
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .geo-border-t {
+    border-top: 1px solid #e5e7eb;
+  }
+  .geo-tracking-wide {
+    letter-spacing: 2px;
+  }
+  .geo-tracking-wider {
+    letter-spacing: 3px;
+  }
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #ffffff;
+  color: #1a1a1a;
+}
