@@ -438,6 +438,25 @@ export function createDb(onChange) {
     return pub;
   }
 
+  async function removeUser(id) {
+    const current = mode === 'postgres'
+      ? (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0]
+      : store.users.find((u) => u.id === id);
+    if (!current) return null;
+    if (mode === 'postgres') {
+      await pool.query('DELETE FROM users WHERE id = $1', [id]);
+      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
+        JSON.stringify({ collection: 'users', action: 'DELETE', id }),
+      ]);
+    } else {
+      store.users = store.users.filter((u) => u.id !== id);
+      persistSoon();
+    }
+    const pub = publicUser(current);
+    emit({ collection: 'users', action: 'delete', record: pub || { id } });
+    return pub;
+  }
+
   async function list(collection, filter = {}) {
     if (mode === 'postgres') {
       const { rows } = await pool.query(
@@ -555,6 +574,7 @@ export function createDb(onChange) {
     getUser,
     createUser,
     updateUser,
+    removeUser,
     list,
     get,
     create,

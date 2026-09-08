@@ -1,1515 +1,1021 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Building2, 
-  Stethoscope, 
-  Users, 
-  Calendar, 
-  FileText, 
-  Activity, 
-  Clock, 
-  Phone, 
-  MapPin, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  CheckCircle2, 
-  AlertCircle, 
-  Search, 
-  Filter, 
-  Star, 
-  ShieldCheck, 
-  QrCode, 
-  Printer, 
-  Download, 
-  LogOut, 
-  Bell, 
-  Menu, 
-  X, 
-  UserCheck, 
-  BedDouble, 
-  HeartPulse, 
-  Sparkles, 
-  Pill, 
-  Save, 
-  Share2, 
-  Eye, 
+import React, { useMemo, useState } from 'react';
+import {
+  BarChart3,
+  Bell,
+  Building2,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
   ChevronRight,
-  TrendingUp,
+  Clock,
   CreditCard,
-  Check,
-  PhoneCall,
-  UserPlus
+  Edit3,
+  FileText,
+  Headphones,
+  HeartPulse,
+  IndianRupee,
+  LayoutDashboard,
+  LifeBuoy,
+  LogOut,
+  Menu,
+  Plus,
+  Search,
+  Settings,
+  ShieldCheck,
+  Star,
+  Stethoscope,
+  Trash2,
+  UserRound,
+  Users,
+  X,
 } from 'lucide-react';
-import { HospitalPartner, SeniorDoctor, HospitalVisitRequest, Doctor } from '../types';
-import { PARTNER_HOSPITALS, INITIAL_HOSPITAL_VISIT_REQUESTS, SPECIALITIES } from '../data/mockData';
+import { Doctor, HospitalPartner, HospitalVisitRequest, SeniorDoctor } from '../types';
+import { INITIAL_HOSPITAL_VISIT_REQUESTS, PARTNER_HOSPITALS, SPECIALITIES } from '../data/mockData';
 import { PatientVerificationSection, VerifiedAyudhPatient } from './PatientVerificationSection';
-import { useLiveData } from '../context/LiveDataContext';
 import { useAuth } from '../context/AuthContext';
+import { useLiveData } from '../context/LiveDataContext';
 
 interface HospitalDashboardProps {
   onLogout: () => void;
   onNavigateHome: () => void;
   visitRequests?: HospitalVisitRequest[];
-  onUpdateVisitRequestStatus?: (requestId: string, newStatus: HospitalVisitRequest['status'], updateData?: Partial<HospitalVisitRequest>) => void;
+  onUpdateVisitRequestStatus?: (
+    requestId: string,
+    newStatus: HospitalVisitRequest['status'],
+    updateData?: Partial<HospitalVisitRequest>
+  ) => void;
 }
+
+type HospitalNav =
+  | 'Dashboard'
+  | 'Appointments'
+  | 'Patients'
+  | 'Consultations'
+  | 'Doctors Management'
+  | 'Prescriptions'
+  | 'Reports'
+  | 'Earnings'
+  | 'Subscription'
+  | 'Profile'
+  | 'Availability'
+  | 'Messages'
+  | 'Notifications'
+  | 'Support'
+  | 'Settings';
+
+type HospitalDoctor = Partial<Doctor & SeniorDoctor> & {
+  id: string;
+  hospitalName?: string;
+  qualifications?: string;
+};
+
+const defaultHospital: HospitalPartner = {
+  id: 'hosp-1',
+  name: 'Ayudh Vikas Partner Hospital',
+  shortName: 'AVH',
+  district: 'Warangal',
+  location: 'Warangal',
+  address: 'Warangal, Telangana',
+  phone: '9000045073',
+  emergencyPhone: '1800 123 4567',
+  rating: 4.8,
+  totalReviews: 384,
+  totalBeds: 150,
+  availableBeds: 42,
+  icuBeds: 12,
+  specialities: ['Cardiology', 'General Medicine', 'Emergency Care'],
+  seniorDoctors: [],
+  facilities: ['24x7 Emergency', 'ICU', 'Diagnostic Lab', 'Ayudh Cashless Desk'],
+  logoText: 'AVH',
+  logoBg: 'bg-emerald-700',
+  hasAyudhCashless: true,
+  isOpen24x7: true,
+};
+
+const fallbackDoctors: HospitalDoctor[] = [
+  {
+    id: 'doc-hosp-1',
+    name: 'Dr. V. Rajeshwar Rao',
+    designation: 'Chief Senior Consultant',
+    speciality: 'Cardiology',
+    qualification: 'MBBS, MD, DM',
+    experienceYears: 22,
+    rating: 4.9,
+    opdTimings: 'Mon - Sat: 09:30 AM - 02:30 PM',
+    roomNumber: 'OPD Suite 102',
+    consultationFee: 700,
+    status: 'Active',
+  },
+  {
+    id: 'doc-hosp-2',
+    name: 'Dr. P. Suresh Reddy',
+    designation: 'Senior Consultant',
+    speciality: 'Neurology',
+    qualification: 'MBBS, MD, DM',
+    experienceYears: 18,
+    rating: 4.8,
+    opdTimings: 'Mon - Fri: 10:00 AM - 03:00 PM',
+    roomNumber: 'OPD Suite 108',
+    consultationFee: 650,
+    status: 'Active',
+  },
+  {
+    id: 'doc-hosp-3',
+    name: 'Dr. M. Sandhya Rani',
+    designation: 'Senior Consultant',
+    speciality: 'Gynecology',
+    qualification: 'MBBS, MS, DGO',
+    experienceYears: 16,
+    rating: 4.9,
+    opdTimings: 'Mon - Sat: 11:00 AM - 04:00 PM',
+    roomNumber: 'Women Care OPD 204',
+    consultationFee: 600,
+    status: 'Active',
+  },
+];
+
+const notifications = [
+  { title: 'New patient visit request', subtitle: 'Cardiology OPD requested for 10:30 AM', time: '10 min ago', icon: Calendar },
+  { title: 'Doctor status updated', subtitle: 'OPD availability changed by hospital admin', time: '1 hour ago', icon: Stethoscope },
+  { title: 'Subscription active', subtitle: 'Growth plan renewal is valid this month', time: '2 hours ago', icon: CreditCard },
+];
+
+const scheduleItems = [
+  { day: '24', month: 'May', title: 'Health Checkup Camp', location: 'Warangal, MGM Hospital', time: '09:00 AM - 04:00 PM' },
+  { day: '26', month: 'May', title: 'Cardiology OP', location: 'Ayudh Vikas Desk', time: '10:00 AM - 01:00 PM' },
+  { day: '28', month: 'May', title: 'Awareness Program', location: 'Hanamkonda', time: '03:00 PM - 05:00 PM' },
+];
+
+const statusClasses: Record<string, string> = {
+  Active: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+  'In OPD': 'bg-sky-50 text-sky-700 border-sky-300',
+  'On Leave': 'bg-rose-50 text-rose-700 border-rose-300',
+  'Emergency Only': 'bg-amber-50 text-amber-700 border-amber-300',
+};
+
+const emptyDoctorForm = {
+  id: '',
+  name: '',
+  designation: 'Senior Consultant',
+  speciality: 'Cardiology',
+  qualification: 'MBBS, MD',
+  experienceYears: '8',
+  opdTimings: 'Mon - Sat: 10:00 AM - 02:00 PM',
+  roomNumber: 'OPD Suite 101',
+  consultationFee: '600',
+  status: 'Active' as NonNullable<SeniorDoctor['status']>,
+  phone: '',
+  email: '',
+};
+
+const Info: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
+    <div className="text-[10px] uppercase font-black text-slate-400">{label}</div>
+    <div className="text-xs font-black text-slate-900 mt-1">{value}</div>
+  </div>
+);
+
+const Field: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}> = ({ label, value, onChange, type = 'text', required }) => (
+  <label className="space-y-1">
+    <span className="font-black text-slate-700">{label}{required ? ' *' : ''}</span>
+    <input
+      required={required}
+      type={type}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+  </label>
+);
 
 export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
   onLogout,
   onNavigateHome,
   visitRequests,
-  onUpdateVisitRequestStatus
+  onUpdateVisitRequestStatus,
 }) => {
-  const { collections, create, update, remove } = useLiveData();
   const { user } = useAuth();
-  const liveHospitals = collections.hospitals.length ? collections.hospitals : PARTNER_HOSPITALS;
-  // Current logged in hospital (Default to KIMS Hospitals)
-  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(user?.hospitalId || 'hosp-1');
-  const currentHospital = liveHospitals.find(h => h.id === selectedHospitalId) || liveHospitals[0];
+  const { collections, create, update, remove } = useLiveData();
+  const [activeNav, setActiveNav] = useState<HospitalNav>('Dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const [doctorForm, setDoctorForm] = useState(emptyDoctorForm);
+  const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
+  const [doctorModalOpen, setDoctorModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const liveVisitRequests = collections.visit_requests.length ? collections.visit_requests : INITIAL_HOSPITAL_VISIT_REQUESTS;
-  const allVisitRequests: HospitalVisitRequest[] = (visitRequests && Array.isArray(visitRequests))
+  const liveHospitals = collections.hospitals.length ? (collections.hospitals as HospitalPartner[]) : PARTNER_HOSPITALS;
+  const currentHospital = useMemo(() => {
+    return (
+      liveHospitals.find((hospital) => hospital.id === user?.hospitalId) ||
+      liveHospitals.find((hospital) => hospital.name === user?.hospitalName) ||
+      liveHospitals[0] ||
+      defaultHospital
+    );
+  }, [liveHospitals, user?.hospitalId, user?.hospitalName]);
+
+  const allVisitRequests = (visitRequests && Array.isArray(visitRequests)
     ? visitRequests
-    : liveVisitRequests;
+    : collections.visit_requests.length
+      ? collections.visit_requests
+      : INITIAL_HOSPITAL_VISIT_REQUESTS) as HospitalVisitRequest[];
 
-  // Active Navigation Tab
-  // 'overview' | 'doctors_management' | 'visit_requests' | 'opd_consultations' | 'member_verification' | 'bed_management'
-  const [activeTab, setActiveTab] = useState<string>('overview');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hospitalRequests = useMemo(() => {
+    const hospitalName = currentHospital.name.toLowerCase();
+    const shortName = currentHospital.shortName.toLowerCase();
+    return allVisitRequests.filter((request) => {
+      const requestHospitalName = request.hospitalName?.toLowerCase() || '';
+      return (
+        request.hospitalId === currentHospital.id ||
+        requestHospitalName.includes(hospitalName) ||
+        requestHospitalName.includes(shortName)
+      );
+    });
+  }, [allVisitRequests, currentHospital.id, currentHospital.name, currentHospital.shortName]);
 
-  // Doctors Roster State (Initialized from live hospital roster)
-  const liveHospitalDoctors = collections.doctors.filter((d: any) => d.hospitalId === currentHospital?.id);
-  const [doctorsList, setDoctorsList] = useState<SeniorDoctor[]>(() => {
-    return (liveHospitalDoctors.length ? liveHospitalDoctors : currentHospital.seniorDoctors) || [
-      {
-        id: 'doc-kims-1',
-        name: 'Dr. V. Rajeshwar Rao',
-        designation: 'Chief Senior Interventional Cardiologist & HOD',
-        speciality: 'Cardiologist',
-        qualification: 'MBBS, MD (Gen Med), DM (Cardiology), FSCAI',
-        experienceYears: 22,
-        rating: 4.9,
-        opdTimings: 'Mon - Sat: 09:30 AM - 02:30 PM',
-        roomNumber: 'OPD Suite 102',
-        consultationFee: 700,
-        status: 'Active'
-      },
-      {
-        id: 'doc-kims-2',
-        name: 'Dr. P. Suresh Reddy',
-        designation: 'Senior Consultant Neurologist & Stroke Specialist',
-        speciality: 'Neurologist',
-        qualification: 'MBBS, MD, DM (Neurology)',
-        experienceYears: 18,
-        rating: 4.8,
-        opdTimings: 'Mon - Fri: 10:00 AM - 03:00 PM',
-        roomNumber: 'OPD Suite 108',
-        consultationFee: 650,
-        status: 'Active'
-      },
-      {
-        id: 'doc-kims-3',
-        name: 'Dr. M. Sandhya Rani',
-        designation: 'Senior Consultant Gynecologist & High-Risk Pregnancy',
-        speciality: 'Gynecologist',
-        qualification: 'MBBS, MS (OBG), DGO',
-        experienceYears: 16,
-        rating: 4.9,
-        opdTimings: 'Mon - Sat: 11:00 AM - 04:00 PM',
-        roomNumber: 'Women Care OPD 204',
-        consultationFee: 600,
-        status: 'Active'
-      },
-      {
-        id: 'doc-kims-4',
-        name: 'Dr. K. Srinivas Murthy',
-        designation: 'Senior General Physician & Diabetologist',
-        speciality: 'General Medicine',
-        qualification: 'MBBS, MD (Internal Medicine)',
-        experienceYears: 20,
-        rating: 4.9,
-        opdTimings: 'Mon - Sat: 09:00 AM - 01:00 PM, 05:00 PM - 08:00 PM',
-        roomNumber: 'OPD Suite 101',
-        consultationFee: 500,
-        status: 'Active'
-      }
-    ];
+  const hospitalDoctors = useMemo<HospitalDoctor[]>(() => {
+    const hospitalName = currentHospital.name.toLowerCase();
+    const shortName = currentHospital.shortName.toLowerCase();
+    const liveDoctors = (collections.doctors as HospitalDoctor[]).filter((doctor) => {
+      const doctorHospital = String(doctor.hospital || '').toLowerCase();
+      const doctorHospitalName = String(doctor.hospitalName || '').toLowerCase();
+      return (
+        doctor.hospitalId === currentHospital.id ||
+        doctorHospital === shortName ||
+        doctorHospital === hospitalName ||
+        doctorHospitalName === hospitalName ||
+        doctorHospitalName.includes(shortName)
+      );
+    });
+
+    if (liveDoctors.length) return liveDoctors;
+    if (currentHospital.seniorDoctors?.length) {
+      return currentHospital.seniorDoctors.map((doctor) => ({
+        ...doctor,
+        hospitalId: currentHospital.id,
+        hospital: currentHospital.shortName,
+        hospitalName: currentHospital.name,
+      }));
+    }
+    return fallbackDoctors.map((doctor) => ({
+      ...doctor,
+      hospitalId: currentHospital.id,
+      hospital: currentHospital.shortName,
+      hospitalName: currentHospital.name,
+    }));
+  }, [collections.doctors, currentHospital]);
+
+  const filteredDoctors = hospitalDoctors.filter((doctor) => {
+    const text = `${doctor.name || ''} ${doctor.speciality || ''} ${doctor.designation || ''}`.toLowerCase();
+    return text.includes(doctorSearch.toLowerCase());
   });
 
-  // Doctor CRUD Modals
-  const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
-  const [isEditDoctorModalOpen, setIsEditDoctorModalOpen] = useState(false);
-  const [isDeleteDoctorModalOpen, setIsDeleteDoctorModalOpen] = useState(false);
-  const [selectedDoctorForEdit, setSelectedDoctorForEdit] = useState<SeniorDoctor | null>(null);
-  const [selectedDoctorForDelete, setSelectedDoctorForDelete] = useState<SeniorDoctor | null>(null);
+  const pendingRequests = hospitalRequests.filter((request) => request.status === 'Pending');
+  const acceptedRequests = hospitalRequests.filter((request) => ['Accepted', 'Scheduled', 'Completed'].includes(request.status));
+  const activeDoctors = hospitalDoctors.filter((doctor) => (doctor.status || 'Active') === 'Active');
+  const todayAppointments = Math.max(18, acceptedRequests.length + pendingRequests.length);
+  const monthlyRevenue = hospitalDoctors.reduce((sum, doctor) => sum + Number(doctor.consultationFee || 500) * 8, 0) + 48750;
 
-  // Doctor Form Fields
-  const [docName, setDocName] = useState('');
-  const [docDesignation, setDocDesignation] = useState('');
-  const [docSpeciality, setDocSpeciality] = useState('Cardiologist');
-  const [docQualification, setDocQualification] = useState('');
-  const [docExperience, setDocExperience] = useState('10');
-  const [docOpdTimings, setDocOpdTimings] = useState('Mon - Sat: 10:00 AM - 02:00 PM');
-  const [docRoomNumber, setDocRoomNumber] = useState('OPD Suite 105');
-  const [docConsultationFee, setDocConsultationFee] = useState('600');
-  const [docStatus, setDocStatus] = useState<SeniorDoctor['status']>('Active');
-
-  // Accept Visit Request Modal State
-  const [selectedRequestForAccept, setSelectedRequestForAccept] = useState<HospitalVisitRequest | null>(null);
-  const [assignDoctorName, setAssignDoctorName] = useState('');
-  const [assignTokenNumber, setAssignTokenNumber] = useState('');
-  const [assignRoom, setAssignRoom] = useState('OPD Suite 102');
-  const [acceptNotes, setAcceptNotes] = useState('');
-
-  // Prescription Generator State (Doctor OPD feature)
-  const [selectedPatientForRx, setSelectedPatientForRx] = useState<any>(null);
-  const [rxDiagnosis, setRxDiagnosis] = useState('');
-  const [rxMedicines, setRxMedicines] = useState([
-    { name: 'Tab. Telmisartan 40mg', dosage: '1-0-0 (Once daily after breakfast)', duration: '30 Days' },
-    { name: 'Tab. Atorvastatin 10mg', dosage: '0-0-1 (Once daily at bedtime)', duration: '30 Days' }
-  ]);
-  const [rxNewMedName, setRxNewMedName] = useState('');
-  const [rxNewMedDosage, setRxNewMedDosage] = useState('');
-  const [rxNewMedDuration, setRxNewMedDuration] = useState('15 Days');
-  const [rxAdvice, setRxAdvice] = useState('Low salt, low fat diet. Regular 30 min morning walk. Review after 1 month with Serum Lipid Profile.');
-  const [isRxGenerated, setIsRxGenerated] = useState(false);
-
-  // Toast message
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
   };
 
-  // Hospital Visit Requests for current hospital
-  const hospitalVisitRequests = (allVisitRequests || []).filter(r => 
-    r && (r.hospitalId === selectedHospitalId || r.hospitalName?.toLowerCase().includes(currentHospital.shortName.toLowerCase()))
-  );
+  const navigate = (nav: HospitalNav) => {
+    setActiveNav(nav);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  useEffect(() => {
-    const next = collections.doctors.filter((d: any) => d.hospitalId === currentHospital?.id);
-    if (next.length) setDoctorsList(next);
-  }, [collections.doctors, currentHospital?.id]);
+  const openAddDoctor = () => {
+    setEditingDoctorId(null);
+    setDoctorForm(emptyDoctorForm);
+    setDoctorModalOpen(true);
+  };
 
-  // Status Updater with live database persistence
-  const handleUpdateStatus = (requestId: string, newStatus: HospitalVisitRequest['status'], updateData?: Partial<HospitalVisitRequest>) => {
-    update('visit_requests', requestId, { status: newStatus, ...(updateData || {}) }).catch(console.error);
+  const openEditDoctor = (doctor: HospitalDoctor) => {
+    setEditingDoctorId(doctor.id);
+    setDoctorForm({
+      id: doctor.id,
+      name: doctor.name || '',
+      designation: doctor.designation || 'Senior Consultant',
+      speciality: doctor.speciality || 'Cardiology',
+      qualification: doctor.qualification || doctor.qualifications || 'MBBS, MD',
+      experienceYears: String(doctor.experienceYears || 5),
+      opdTimings: doctor.opdTimings || doctor.availability || 'Mon - Sat: 10:00 AM - 02:00 PM',
+      roomNumber: doctor.roomNumber || 'OPD Suite 101',
+      consultationFee: String(doctor.consultationFee || 600),
+      status: (doctor.status || 'Active') as NonNullable<SeniorDoctor['status']>,
+      phone: doctor.phone || '',
+      email: doctor.email || '',
+    });
+    setDoctorModalOpen(true);
+  };
 
-    if (onUpdateVisitRequestStatus) {
-      onUpdateVisitRequestStatus(requestId, newStatus, updateData);
+  const saveDoctor = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const enteredName = doctorForm.name.trim();
+    if (!enteredName) return;
+    const name = enteredName.startsWith('Dr.') ? enteredName : `Dr. ${enteredName}`;
+
+    const payload = {
+      name,
+      designation: doctorForm.designation,
+      speciality: doctorForm.speciality,
+      qualification: doctorForm.qualification,
+      qualifications: doctorForm.qualification,
+      experienceYears: Number(doctorForm.experienceYears) || 0,
+      rating: editingDoctorId ? undefined : 4.8,
+      opdTimings: doctorForm.opdTimings,
+      availability: doctorForm.opdTimings,
+      roomNumber: doctorForm.roomNumber,
+      consultationFee: Number(doctorForm.consultationFee) || 0,
+      status: doctorForm.status,
+      phone: doctorForm.phone,
+      email: doctorForm.email,
+      hospitalId: currentHospital.id,
+      hospital: currentHospital.shortName,
+      hospitalName: currentHospital.name,
+      district: currentHospital.district,
+      location: currentHospital.location || currentHospital.district,
+    };
+
+    try {
+      if (editingDoctorId) {
+        await update('doctors', editingDoctorId, payload);
+        showToast('Doctor details updated successfully.');
+      } else {
+        await create('doctors', payload);
+        showToast('Doctor added to this hospital successfully.');
+      }
+      setDoctorModalOpen(false);
+      setEditingDoctorId(null);
+      setDoctorForm(emptyDoctorForm);
+    } catch (error) {
+      console.error(error);
+      showToast('Doctor save failed. Please check the server connection.');
     }
   };
 
-  // Reset Doctor Form
-  const resetDoctorForm = () => {
-    setDocName('');
-    setDocDesignation('');
-    setDocSpeciality('Cardiologist');
-    setDocQualification('');
-    setDocExperience('10');
-    setDocOpdTimings('Mon - Sat: 10:00 AM - 02:00 PM');
-    setDocRoomNumber('OPD Suite 105');
-    setDocConsultationFee('600');
-    setDocStatus('Active');
+  const deleteDoctor = async (doctor: HospitalDoctor) => {
+    try {
+      await remove('doctors', doctor.id);
+      showToast('Doctor removed from this hospital.');
+    } catch (error) {
+      console.error(error);
+      showToast('Doctor delete failed. Please check the server connection.');
+    }
   };
 
-  // Open Edit Doctor Modal
-  const handleOpenEditDoctor = (doc: SeniorDoctor) => {
-    setSelectedDoctorForEdit(doc);
-    setDocName(doc.name);
-    setDocDesignation(doc.designation);
-    setDocSpeciality(doc.speciality);
-    setDocQualification(doc.qualification);
-    setDocExperience(String(doc.experienceYears));
-    setDocOpdTimings(doc.opdTimings);
-    setDocRoomNumber(doc.roomNumber || 'OPD Suite 101');
-    setDocConsultationFee(String(doc.consultationFee || 600));
-    setDocStatus(doc.status || 'Active');
-    setIsEditDoctorModalOpen(true);
+  const toggleDoctorStatus = async (doctor: HospitalDoctor) => {
+    const nextStatus = doctor.status === 'Active' ? 'On Leave' : doctor.status === 'On Leave' ? 'Emergency Only' : 'Active';
+    try {
+      await update('doctors', doctor.id, { status: nextStatus });
+      showToast('Doctor duty status updated.');
+    } catch (error) {
+      console.error(error);
+      showToast('Unable to update doctor status.');
+    }
   };
 
-  // Save New Doctor
-  const handleSaveNewDoctor = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!docName.trim()) return;
-
-    const newDoc: SeniorDoctor = {
-      id: `doc-${Date.now()}`,
-      name: docName.startsWith('Dr.') ? docName : `Dr. ${docName}`,
-      designation: docDesignation || 'Senior Consultant',
-      speciality: docSpeciality,
-      qualification: docQualification || 'MBBS, MD',
-      experienceYears: parseInt(docExperience, 10) || 5,
-      rating: 4.9,
-      opdTimings: docOpdTimings,
-      roomNumber: docRoomNumber,
-      consultationFee: parseInt(docConsultationFee, 10) || 500,
-      status: docStatus || 'Active'
+  const updateRequestStatus = async (request: HospitalVisitRequest, status: HospitalVisitRequest['status']) => {
+    const tokenNumber = status === 'Accepted' ? `${currentHospital.shortName}-OPD-${Math.floor(100 + Math.random() * 899)}` : request.tokenNumber;
+    const updateData = {
+      status,
+      tokenNumber,
+      acceptedAt: status === 'Accepted' ? 'Today, Just Now' : request.acceptedAt,
+      reportingRoom: request.reportingRoom || 'Ayudh Desk, Ground Floor',
+      hospitalNotes: status === 'Accepted' ? 'Visit accepted. Please report 15 minutes before the slot.' : request.hospitalNotes,
     };
-
-    setDoctorsList(prev => [newDoc, ...prev]);
-    create('doctors', { ...newDoc, hospitalId: currentHospital.id, hospital: currentHospital.shortName }).catch(console.error);
-    setIsAddDoctorModalOpen(false);
-    resetDoctorForm();
-    showToast(`Dr. ${newDoc.name} added to Hospital Roster successfully!`);
+    try {
+      await update('visit_requests', request.id, updateData);
+      onUpdateVisitRequestStatus?.(request.id, status, updateData);
+      showToast(`Visit request ${status.toLowerCase()}.`);
+    } catch (error) {
+      console.error(error);
+      showToast('Visit request update failed.');
+    }
   };
 
-  // Save Updated Doctor
-  const handleSaveUpdatedDoctor = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDoctorForEdit || !docName.trim()) return;
-
-    setDoctorsList(prev => prev.map(d => {
-      if (d.id === selectedDoctorForEdit.id) {
-        return {
-          ...d,
-          name: docName,
-          designation: docDesignation,
-          speciality: docSpeciality,
-          qualification: docQualification,
-          experienceYears: parseInt(docExperience, 10) || d.experienceYears,
-          opdTimings: docOpdTimings,
-          roomNumber: docRoomNumber,
-          consultationFee: parseInt(docConsultationFee, 10) || d.consultationFee,
-          status: docStatus
-        };
-      }
-      return d;
-    }));
-
-    update('doctors', selectedDoctorForEdit.id, {
-      name: docName,
-      designation: docDesignation,
-      speciality: docSpeciality,
-      qualification: docQualification,
-      experienceYears: parseInt(docExperience, 10),
-      opdTimings: docOpdTimings,
-      roomNumber: docRoomNumber,
-      consultationFee: parseInt(docConsultationFee, 10),
-      status: docStatus,
-    }).catch(console.error);
-    setIsEditDoctorModalOpen(false);
-    setSelectedDoctorForEdit(null);
-    showToast(`Doctor details updated successfully!`);
+  const handlePatientVerified = (patient: VerifiedAyudhPatient, method: string) => {
+    showToast(`${patient.name} verified through ${method}.`);
   };
 
-  // Delete Doctor
-  const handleDeleteDoctor = () => {
-    if (!selectedDoctorForDelete) return;
-    const id = selectedDoctorForDelete.id;
-    setDoctorsList(prev => prev.filter(d => d.id !== id));
-    remove('doctors', id).catch(console.error);
-    setIsDeleteDoctorModalOpen(false);
-    setSelectedDoctorForDelete(null);
-    showToast(`Doctor removed from Hospital Roster.`);
+  const handleWalkInAddedToQueue = (patient: VerifiedAyudhPatient, tokenNumber: string) => {
+    showToast(`${patient.name} added to walk-in queue with token ${tokenNumber}.`);
   };
 
-  // Quick Toggle Doctor Status
-  const handleToggleDoctorStatus = (docId: string) => {
-    setDoctorsList(prev => prev.map(d => {
-      if (d.id === docId) {
-        const nextStatus: SeniorDoctor['status'] = 
-          d.status === 'Active' ? 'On Leave' :
-          d.status === 'On Leave' ? 'Emergency Only' : 'Active';
-        return { ...d, status: nextStatus };
-      }
-      return d;
-    }));
-    showToast('Doctor on-duty status updated!');
+  const navItems: Array<{ label: HospitalNav; icon: React.ElementType; count?: number; badge?: string }> = [
+    { label: 'Dashboard', icon: LayoutDashboard },
+    { label: 'Appointments', icon: Calendar, count: todayAppointments },
+    { label: 'Patients', icon: Users, badge: 'Verify' },
+    { label: 'Consultations', icon: Stethoscope },
+    { label: 'Doctors Management', icon: Building2, count: hospitalDoctors.length },
+    { label: 'Prescriptions', icon: FileText },
+    { label: 'Reports', icon: BarChart3 },
+    { label: 'Earnings', icon: IndianRupee },
+    { label: 'Subscription', icon: CreditCard },
+    { label: 'Profile', icon: UserRound },
+    { label: 'Availability', icon: Clock },
+    { label: 'Messages', icon: Users, count: 3 },
+    { label: 'Notifications', icon: Bell, count: 5 },
+    { label: 'Support', icon: LifeBuoy },
+    { label: 'Settings', icon: Settings },
+  ];
+
+  const metricCards = [
+    { title: "Today's Appointments", value: todayAppointments, icon: Calendar, color: 'blue', action: 'View All', target: 'Appointments' as HospitalNav, sub: `${pendingRequests.length} pending` },
+    { title: 'Total Patients', value: Math.max(256, collections.patients.length || 0), icon: Users, color: 'emerald', action: 'View All', target: 'Patients' as HospitalNav, sub: 'Network patients' },
+    { title: 'Consultations Today', value: Math.max(32, acceptedRequests.length * 2), icon: Stethoscope, color: 'purple', action: 'View OPD', target: 'Consultations' as HospitalNav, sub: `${activeDoctors.length} doctors active` },
+    { title: 'Patient Rating', value: `${currentHospital.rating || 4.8}`, icon: Star, color: 'amber', action: 'View Reviews', target: 'Reports' as HospitalNav, sub: `/ 5 (${currentHospital.totalReviews || 384})` },
+    { title: 'This Month Earnings', value: `Rs. ${monthlyRevenue.toLocaleString('en-IN')}`, icon: IndianRupee, color: 'blue', action: 'View Details', target: 'Earnings' as HospitalNav, sub: 'OPD + network' },
+  ];
+
+  const renderMetricCard = (card: (typeof metricCards)[number]) => {
+    const colorMap: Record<string, { box: string; icon: string; border: string; text: string }> = {
+      blue: { box: 'bg-blue-50', icon: 'bg-blue-600 text-white', border: 'border-blue-200', text: 'text-blue-700' },
+      emerald: { box: 'bg-emerald-50', icon: 'bg-emerald-600 text-white', border: 'border-emerald-200', text: 'text-emerald-700' },
+      purple: { box: 'bg-purple-50', icon: 'bg-purple-600 text-white', border: 'border-purple-200', text: 'text-purple-700' },
+      amber: { box: 'bg-amber-50', icon: 'bg-amber-500 text-white', border: 'border-amber-200', text: 'text-amber-700' },
+    };
+    const palette = colorMap[card.color];
+    const Icon = card.icon;
+    return (
+      <button
+        key={card.title}
+        onClick={() => navigate(card.target)}
+        className={`${palette.box} ${palette.border} border rounded-lg p-3 min-h-[104px] text-left shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span className={`${palette.icon} w-9 h-9 rounded-full flex items-center justify-center shrink-0`}>
+            <Icon className="w-4 h-4" />
+          </span>
+          <div className="text-right min-w-0">
+            <div className="text-2xl font-black text-slate-950 leading-none truncate">{card.value}</div>
+            <div className="text-[10px] font-bold text-slate-700 mt-1 truncate">{card.title}</div>
+            <div className="text-[10px] font-semibold text-slate-500 truncate">{card.sub}</div>
+          </div>
+        </div>
+        <div className={`border-t ${palette.border} pt-2 mt-2 flex items-center justify-between text-[11px] font-black ${palette.text}`}>
+          <span>{card.action}</span>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </div>
+      </button>
+    );
   };
 
-  // Open Accept Request Modal
-  const handleOpenAcceptModal = (req: HospitalVisitRequest) => {
-    setSelectedRequestForAccept(req);
-    setAssignDoctorName(req.doctorName || doctorsList[0]?.name || 'Dr. V. Rajeshwar Rao');
-    setAssignTokenNumber(`KIMS-OPD-${Math.floor(10 + Math.random() * 89)}`);
-    setAssignRoom('OPD Suite 102 (1st Floor)');
-    setAcceptNotes('Visit Confirmed. Please report to Ayudh Cashless Desk Counter 4 with your Digital ID card 15 minutes before the slot.');
-  };
+  const renderDoctorsManagement = () => (
+    <div className="space-y-4">
+      <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black text-slate-950">Doctors Management</h2>
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <label className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={doctorSearch}
+                onChange={(event) => setDoctorSearch(event.target.value)}
+                placeholder="Search doctors"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+            <button onClick={openAddDoctor} className="bg-[#00703c] hover:bg-[#005f33] text-white text-xs font-black px-4 py-2 rounded-lg flex items-center justify-center gap-2 cursor-pointer">
+              <Plus className="w-4 h-4" />
+              Add Doctor
+            </button>
+          </div>
+        </div>
+      </section>
 
-  // Confirm Accept Request
-  const handleConfirmAcceptRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedRequestForAccept) return;
+      <section className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+        {filteredDoctors.map((doctor) => (
+          <article key={doctor.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-blue-300 transition-colors">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-slate-950 truncate">{doctor.name}</h3>
+                <p className="text-[11px] font-bold text-emerald-700">{doctor.speciality}</p>
+                <p className="text-[11px] text-slate-500 font-semibold line-clamp-2">{doctor.designation || 'Senior Consultant'}</p>
+              </div>
+              <span className={`text-[10px] font-black px-2 py-1 rounded-lg border shrink-0 ${statusClasses[doctor.status || 'Active'] || statusClasses.Active}`}>
+                {doctor.status || 'Active'}
+              </span>
+            </div>
 
-    handleUpdateStatus(selectedRequestForAccept.id, 'Accepted', {
-      doctorName: assignDoctorName,
-      tokenNumber: assignTokenNumber,
-      reportingRoom: assignRoom,
-      hospitalNotes: acceptNotes,
-      acceptedAt: 'Today, Just Now'
-    });
+            <div className="my-4 rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2 text-xs">
+              <div className="flex justify-between gap-3">
+                <span className="font-bold text-slate-500">Qualification</span>
+                <span className="font-black text-slate-800 text-right">{doctor.qualification || doctor.qualifications || 'MBBS, MD'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="font-bold text-slate-500">Experience</span>
+                <span className="font-black text-slate-800">{doctor.experienceYears || 5} years</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="font-bold text-slate-500">Room</span>
+                <span className="font-black text-emerald-700">{doctor.roomNumber || 'OPD Suite 101'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="font-bold text-slate-500">Fee</span>
+                <span className="font-black text-slate-950">Rs. {doctor.consultationFee || 500}</span>
+              </div>
+              <div className="pt-2 border-t border-slate-200 text-[11px] font-semibold text-slate-600">
+                {doctor.opdTimings || doctor.availability || 'Mon - Sat: 10:00 AM - 02:00 PM'}
+              </div>
+            </div>
 
-    setSelectedRequestForAccept(null);
-    showToast(`Visit request accepted! Token ${assignTokenNumber} assigned to patient.`);
-  };
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => toggleDoctorStatus(doctor)} className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-black py-2 cursor-pointer">
+                Duty
+              </button>
+              <button onClick={() => openEditDoctor(doctor)} className="rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-black py-2 flex items-center justify-center gap-1 cursor-pointer">
+                <Edit3 className="w-3.5 h-3.5" />
+                Edit
+              </button>
+              <button onClick={() => deleteDoctor(doctor)} className="rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-black py-2 flex items-center justify-center gap-1 cursor-pointer">
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </div>
+          </article>
+        ))}
+      </section>
+    </div>
+  );
 
-  // Add medicine to Rx
-  const handleAddMedicineToRx = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!rxNewMedName) return;
-    setRxMedicines(prev => [...prev, { name: rxNewMedName, dosage: rxNewMedDosage || '1-0-1', duration: rxNewMedDuration }]);
-    setRxNewMedName('');
-    setRxNewMedDosage('');
+  const renderAppointments = () => (
+    <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-4 gap-4">
+        <div>
+          <h2 className="text-base font-black text-slate-950">Hospital Appointment Requests</h2>
+          <p className="text-xs font-semibold text-slate-500">Accept, reject, and monitor visit requests for this hospital.</p>
+        </div>
+        <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 text-xs font-black shrink-0">{pendingRequests.length} Pending</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {hospitalRequests.map((request) => (
+          <div key={request.id} className="py-4 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr_auto] gap-3 items-center text-xs">
+            <div>
+              <div className="font-black text-slate-950">{request.patientName}</div>
+              <div className="text-[11px] font-semibold text-slate-500">{request.patientPhone} - {request.patientAge || '--'} Y / {request.patientGender || 'Patient'}</div>
+            </div>
+            <div>
+              <div className="font-black text-blue-700">{request.department} - {request.visitType}</div>
+              <div className="text-[11px] font-semibold text-slate-500">{request.preferredDate}, {request.preferredTimeSlot}</div>
+            </div>
+            <div className="flex items-center justify-start lg:justify-end gap-2">
+              <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-black ${request.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-300'}`}>
+                {request.status}
+              </span>
+              {request.status === 'Pending' && (
+                <>
+                  <button onClick={() => updateRequestStatus(request, 'Accepted')} className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 font-black cursor-pointer">Accept</button>
+                  <button onClick={() => updateRequestStatus(request, 'Rejected')} className="rounded-lg bg-rose-50 text-rose-700 px-3 py-1.5 font-black cursor-pointer">Reject</button>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderProfile = () => (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+        <h2 className="text-base font-black text-slate-950">Hospital Profile</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <Info label="Hospital" value={currentHospital.name} />
+          <Info label="District" value={currentHospital.district} />
+          <Info label="Phone" value={currentHospital.phone || '9000045073'} />
+          <Info label="Emergency" value={currentHospital.emergencyPhone || '1800 123 4567'} />
+          <Info label="Beds" value={`${currentHospital.availableBeds || 0} available / ${currentHospital.totalBeds || 0} total`} />
+          <Info label="Rating" value={`${currentHospital.rating || 4.8} / 5`} />
+        </div>
+      </section>
+      <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
+        <h2 className="text-base font-black text-slate-950">Enabled Features</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {['Ayudh Cashless Desk', 'Visit Requests', 'Doctor CRUD', 'Priority Listing', 'Analytics', 'Emergency Support'].map((feature) => (
+            <div key={feature} className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">
+              <CheckCircle2 className="w-4 h-4" />
+              {feature}
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderDashboard = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">{metricCards.map(renderMetricCard)}</div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.45fr_1.15fr_0.85fr] gap-4">
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-950">Today's Hospital Appointments</h3>
+            <button onClick={() => navigate('Appointments')} className="text-[11px] font-black text-blue-700 border border-blue-200 rounded-lg px-3 py-1.5 cursor-pointer">
+              View Calendar
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {(hospitalRequests.length ? hospitalRequests : INITIAL_HOSPITAL_VISIT_REQUESTS).slice(0, 5).map((request, index) => (
+              <div key={request.id} className="py-3 grid grid-cols-[48px_1fr_auto] gap-3 items-center text-xs">
+                <div className="font-black text-slate-950">
+                  {['09:30', '10:30', '11:30', '12:30', '02:00'][index] || '03:00'}
+                  <span className="block text-[10px] text-slate-500">{index < 4 ? 'AM' : 'PM'}</span>
+                </div>
+                <div>
+                  <div className="font-black text-slate-950">{request.patientName}</div>
+                  <div className="text-[10px] font-semibold text-slate-500">
+                    {request.patientAge || 48} Y / {request.patientGender || 'Patient'} - {request.department}
+                  </div>
+                </div>
+                <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-black ${request.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-300'}`}>
+                  {request.status}
+                </span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => navigate('Appointments')} className="w-full border-t border-slate-100 pt-3 text-[11px] font-black text-blue-700 flex items-center justify-center gap-1 cursor-pointer">
+            View All Appointments <ChevronRight className="w-3 h-3" />
+          </button>
+        </section>
+
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-black text-slate-950">Hospital Overview <span className="text-[11px] font-semibold text-slate-500">(This Month)</span></h3>
+            <select className="text-[11px] font-bold border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
+              <option>This Month</option>
+              <option>Last Month</option>
+            </select>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-7 min-h-[190px]">
+            <div className="relative w-32 h-32 rounded-full border-[18px] border-blue-600">
+              <div className="absolute inset-[-18px] rounded-full border-[18px] border-transparent border-b-emerald-600 border-l-orange-500 border-t-purple-600 rotate-45" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-full">
+                <span className="text-xl font-black text-slate-950">{Math.max(356, hospitalRequests.length)}</span>
+                <span className="text-[10px] font-semibold text-slate-500">Total</span>
+              </div>
+            </div>
+            <div className="space-y-2 text-xs min-w-[190px]">
+              {[
+                ['Completed', 162, 'bg-blue-600'],
+                ['Confirmed', 98, 'bg-emerald-600'],
+                ['Cancelled', 32, 'bg-sky-600'],
+                ['No Show', 28, 'bg-orange-500'],
+                ['Reschedule', 36, 'bg-purple-600'],
+              ].map(([label, value, color]) => (
+                <div key={String(label)} className="flex items-center justify-between gap-4">
+                  <span className="flex items-center gap-2 font-semibold text-slate-700">
+                    <span className={`w-2 h-2 rounded-full ${color}`} />
+                    {label}
+                  </span>
+                  <span className="font-black text-slate-950">{String(value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => navigate('Reports')} className="w-full border-t border-slate-100 pt-3 text-[11px] font-black text-blue-700 flex items-center justify-center gap-1 cursor-pointer">
+            View Full Report <ChevronRight className="w-3 h-3" />
+          </button>
+        </section>
+
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-12">
+            <h3 className="text-sm font-black text-slate-950">Upcoming Schedule</h3>
+            <button onClick={() => navigate('Availability')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
+          </div>
+          <div className="space-y-4">
+            {scheduleItems.map((item, index) => (
+              <div key={item.title} className="grid grid-cols-[45px_1fr] gap-3 text-xs">
+                <div className="border border-slate-200 bg-slate-50 rounded-lg h-12 flex flex-col items-center justify-center">
+                  <span className="text-sm font-black text-slate-950">{item.day}</span>
+                  <span className="text-[10px] font-bold text-slate-500">{item.month}</span>
+                </div>
+                <div className="relative pl-4">
+                  <span className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ${index === 0 ? 'bg-blue-600' : index === 1 ? 'bg-emerald-600' : 'bg-purple-600'}`} />
+                  <div className="font-black text-slate-950">{item.title}</div>
+                  <div className="text-[10px] text-slate-500 font-semibold">{item.location}</div>
+                  <div className="text-[10px] text-slate-400 font-semibold">{item.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-950">Doctors Summary</h3>
+            <button onClick={() => navigate('Doctors Management')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
+          </div>
+          <div className="space-y-3">
+            {[
+              ['Active Doctors', activeDoctors.length, 'bg-blue-50 text-blue-700'],
+              ['On Leave', hospitalDoctors.filter((doctor) => doctor.status === 'On Leave').length, 'bg-emerald-50 text-emerald-700'],
+              ['Departments', currentHospital.specialities.length, 'bg-orange-50 text-orange-700'],
+            ].map(([label, value, cls]) => (
+              <div key={String(label)} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 font-semibold text-slate-700">
+                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${cls}`}><Users className="w-3.5 h-3.5" /></span>
+                  {label}
+                </span>
+                <span className="font-black text-slate-950">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-950">Recent Consultations</h3>
+            <button onClick={() => navigate('Consultations')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {hospitalRequests.slice(0, 4).map((request) => (
+              <div key={request.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <div className="font-black text-slate-950">{request.patientName}</div>
+                  <div className="text-[10px] text-slate-500 font-semibold">{request.preferredDate}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-blue-700">{request.department}</div>
+                  <div className="text-[10px] text-slate-500">{request.doctorName || 'Doctor assignment pending'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-950">Notifications</h3>
+            <button onClick={() => navigate('Notifications')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
+          </div>
+          <div className="space-y-3">
+            {notifications.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="grid grid-cols-[34px_1fr_auto] gap-3 text-xs items-start">
+                  <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <div className="font-black text-slate-950">{item.title}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">{item.subtitle}</div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-semibold">{item.time}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+
+  const renderGenericPanel = () => {
+    if (activeNav === 'Patients') {
+      return <PatientVerificationSection onPatientVerified={handlePatientVerified} onWalkInAddedToQueue={handleWalkInAddedToQueue} />;
+    }
+    if (activeNav === 'Doctors Management') return renderDoctorsManagement();
+    if (activeNav === 'Appointments') return renderAppointments();
+    if (activeNav === 'Profile' || activeNav === 'Subscription' || activeNav === 'Settings') return renderProfile();
+
+    return (
+      <section className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black text-slate-950">{activeNav}</h2>
+            <p className="text-xs font-semibold text-slate-500 mt-1">
+              {activeNav} for {currentHospital.name} follows the same operational layout as the doctor role screen.
+            </p>
+          </div>
+          <button onClick={() => navigate('Dashboard')} className="rounded-lg bg-blue-50 text-blue-700 px-3 py-2 text-xs font-black cursor-pointer">
+            Back to Dashboard
+          </button>
+        </div>
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {metricCards.slice(0, 3).map(renderMetricCard)}
+        </div>
+      </section>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f7fb] text-slate-800 flex flex-col">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#0f2e5a] text-white text-xs font-black px-4 py-3 rounded-2xl shadow-2xl border border-emerald-400 flex items-center gap-2 animate-slideUp">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
+    <div className="min-h-screen bg-[#f4f7fb] text-slate-800 font-sans flex flex-col selection:bg-emerald-500 selection:text-white">
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 bg-[#132d4b] text-white rounded-lg shadow-xl px-4 py-3 text-xs font-black flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+          {toast}
         </div>
       )}
 
-      {/* TOP BAR / HOSPITAL PORTAL HEADER */}
-      <header className="bg-gradient-to-r from-[#0a2540] via-[#0f3b6c] to-[#0052cc] text-white shadow-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          {/* Hospital Brand & Badge */}
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl ${currentHospital.logoBg} text-white flex items-center justify-center font-black text-xs shadow-md border border-white/20`}>
-              {currentHospital.logoText}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-black text-white leading-tight">
-                  {currentHospital.name}
-                </h1>
-                <span className="bg-emerald-500/30 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-400/40 uppercase tracking-wider">
-                  Partner Hospital Portal
-                </span>
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 sm:px-6 py-2.5 shadow-sm">
+        <div className="w-full flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <button className="flex items-center gap-2.5 shrink-0 cursor-pointer" onClick={onNavigateHome}>
+              <div className="w-9 h-9 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center text-emerald-600">
+                <HeartPulse className="w-5 h-5" />
               </div>
-              <div className="text-[11px] text-blue-200 flex items-center gap-2 mt-0.5">
-                <span>📍 {currentHospital.district}</span>
-                <span>•</span>
-                <span>🛏️ {currentHospital.availableBeds} Beds Free</span>
-                <span>•</span>
-                <span className="text-emerald-300 font-bold">Ayudh Cashless Empanelled</span>
+              <div className="hidden sm:flex flex-col text-left">
+                <h1 className="text-sm font-black text-[#0f2e5a] tracking-tight leading-none uppercase">AYUDH VIKAS</h1>
+                <span className="text-[9px] font-extrabold text-[#006633] tracking-wider uppercase">HEALTH CARE NETWORK</span>
+                <span className="text-[7.5px] font-semibold text-slate-500">Care Beyond Boundaries</span>
               </div>
+            </button>
+
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 cursor-pointer" title="Toggle sidebar">
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="hidden md:flex flex-col min-w-0">
+              <h2 className="text-sm font-black text-slate-900 truncate">Welcome, {user?.displayName || user?.name || 'Hospital Admin'}</h2>
+              <p className="text-[11px] text-slate-500 font-medium truncate">Here is what is happening with {currentHospital.shortName} today.</p>
             </div>
           </div>
 
-          {/* Right: Hospital Admin User & Actions */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-3 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15">
-              <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs">
-                KH
-              </div>
-              <div className="text-left text-xs">
-                <div className="font-black text-white">Hospital Administration</div>
-                <div className="text-[10px] text-blue-200">KIMS Warangal Branch</div>
-              </div>
+          <div className="flex items-center gap-2.5 sm:gap-3.5">
+            <button onClick={() => navigate('Patients')} className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-xs font-bold px-3 py-1.5 rounded-full transition-colors cursor-pointer">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
+              <span className="hidden sm:inline">Verify Walk-In Patient</span>
+            </button>
+            <button onClick={() => navigate('Support')} className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full transition-colors cursor-pointer">
+              <Headphones className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Hospital Support</span>
+            </button>
+            <button onClick={() => navigate('Notifications')} className="relative w-8 h-8 rounded-full border border-slate-200 hover:border-slate-300 flex items-center justify-center text-slate-600 bg-white cursor-pointer">
+              <Bell className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">5</span>
+            </button>
+            <div className="relative">
+              <button onClick={() => setUserDropdownOpen(!userDropdownOpen)} className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors">
+                <div className="relative">
+                  <div className={`${currentHospital.logoBg || 'bg-emerald-700'} w-8 h-8 rounded-full text-white flex items-center justify-center text-[10px] font-black border border-slate-200`}>
+                    {currentHospital.logoText || 'AVH'}
+                  </div>
+                  <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+                </div>
+                <div className="hidden sm:flex flex-col text-left max-w-[170px]">
+                  <span className="text-xs font-black text-slate-800 leading-tight truncate">{currentHospital.shortName}</span>
+                  <span className="text-[10px] text-slate-500 font-semibold leading-tight truncate">Hospital Admin</span>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              {userDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-60 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 z-50 text-xs">
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="font-bold text-slate-900">{currentHospital.name}</p>
+                    <p className="text-[10px] text-slate-500">{user?.email || currentHospital.phone}</p>
+                    <p className="text-[9px] text-emerald-700 font-bold mt-0.5">Partner Hospital Portal</p>
+                  </div>
+                  {(['Profile', 'Doctors Management', 'Subscription', 'Settings'] as HospitalNav[]).map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => {
+                        navigate(item);
+                        setUserDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700 font-medium cursor-pointer"
+                    >
+                      <UserRound className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{item}</span>
+                    </button>
+                  ))}
+                  <div className="border-t border-slate-100 my-1" />
+                  <button onClick={onLogout} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2 font-bold cursor-pointer">
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
             </div>
-
-            <button
-              onClick={onNavigateHome}
-              className="text-xs bg-white/15 hover:bg-white/25 text-white font-bold px-3 py-2 rounded-xl transition-all cursor-pointer hidden sm:flex items-center gap-1.5"
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>Public Portal</span>
-            </button>
-
-            <button
-              onClick={onLogout}
-              className="text-xs bg-red-500/20 hover:bg-red-600/30 text-red-200 font-bold px-3 py-2 rounded-xl border border-red-400/30 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
           </div>
-        </div>
-
-        {/* NAVIGATION TABS BAR */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto scrollbar-none border-t border-white/15 py-1 text-xs">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-3.5 py-2 rounded-xl font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-              activeTab === 'overview'
-                ? 'bg-white text-[#0f2e5a] shadow-xs'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Hospital Overview</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('doctors_management')}
-            className={`px-3.5 py-2 rounded-xl font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-              activeTab === 'doctors_management'
-                ? 'bg-white text-[#0f2e5a] shadow-xs'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Stethoscope className="w-3.5 h-3.5 text-blue-500" />
-            <span>Manage Doctors ({doctorsList.length})</span>
-            <span className="bg-emerald-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-              Add / Update
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('visit_requests')}
-            className={`px-3.5 py-2 rounded-xl font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer relative ${
-              activeTab === 'visit_requests'
-                ? 'bg-white text-[#0f2e5a] shadow-xs'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
-            <span>Patient Visit Requests ({hospitalVisitRequests.length})</span>
-            {hospitalVisitRequests.filter(r => r.status === 'Pending').length > 0 && (
-              <span className="bg-amber-400 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
-                {hospitalVisitRequests.filter(r => r.status === 'Pending').length} Pending
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('opd_consultations')}
-            className={`px-3.5 py-2 rounded-xl font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-              activeTab === 'opd_consultations'
-                ? 'bg-white text-[#0f2e5a] shadow-xs'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-purple-400" />
-            <span>Doctor OPD & Prescriptions</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('member_verification')}
-            className={`px-3.5 py-2 rounded-xl font-black transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-              activeTab === 'member_verification'
-                ? 'bg-white text-[#0f2e5a] shadow-xs'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Ayudh Smart Card Verification</span>
-          </button>
         </div>
       </header>
 
-      {/* MAIN BODY CONTENT */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">
-
-        {/* TAB 1: HOSPITAL OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* Quick Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
-                  <Stethoscope className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#0f2e5a]">{doctorsList.length}</div>
-                  <div className="text-xs font-semibold text-slate-500">Active Senior Doctors</div>
-                  <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                    {doctorsList.filter(d => d.status === 'Active').length} on Duty Today
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-                  <Calendar className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#0f2e5a]">{hospitalVisitRequests.length}</div>
-                  <div className="text-xs font-semibold text-slate-500">Visit Requests Today</div>
-                  <div className="text-[10px] text-amber-600 font-bold mt-0.5">
-                    {hospitalVisitRequests.filter(r => r.status === 'Pending').length} Pending Acceptance
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-                  <BedDouble className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#0f2e5a]">{currentHospital.availableBeds} / {currentHospital.totalBeds}</div>
-                  <div className="text-xs font-semibold text-slate-500">Beds Available</div>
-                  <div className="text-[10px] text-emerald-600 font-bold mt-0.5">{currentHospital.icuBeds} ICU Beds Ready</div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="text-2xl font-black text-[#0f2e5a]">₹1,48,500</div>
-                  <div className="text-xs font-semibold text-slate-500">Ayudh Cashless Settlements</div>
-                  <div className="text-[10px] text-purple-600 font-bold mt-0.5">38 Claims Processed</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Hospital Quick Action Banners */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left 2 Cols: Incoming Visit Requests & Doctor OPD Status */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Live Visit Requests Quick Box */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-black text-[#0f2e5a]">Patient Visit Requests Queue</h3>
-                      <p className="text-xs text-slate-500">Review, accept, and allocate OP tokens to incoming patient visits</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab('visit_requests')}
-                      className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>View All ({hospitalVisitRequests.length})</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {hospitalVisitRequests.slice(0, 3).map((req) => (
-                      <div key={req.id} className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800">{req.patientName}</span>
-                            <span className="text-[10px] text-slate-500 font-semibold">({req.patientGender}, {req.patientAge}y)</span>
-                            <span className={`text-[9px] font-black px-2 py-0.2 rounded-full uppercase ${
-                              req.status === 'Accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {req.status}
-                            </span>
-                          </div>
-                          <p className="text-slate-600 mt-1">
-                            <strong>Dept:</strong> {req.department} • <strong>Slot:</strong> {req.preferredDate} ({req.preferredTimeSlot})
-                          </p>
-                          <p className="text-slate-500 text-[11px] mt-0.5">
-                            <strong>Symptoms:</strong> {req.chiefComplaint || (req.symptoms ? req.symptoms.join(', ') : 'General OPD Checkup')}
-                          </p>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-2">
-                          {req.status === 'Pending' ? (
-                            <button
-                              onClick={() => handleOpenAcceptModal(req)}
-                              className="bg-[#00703c] hover:bg-[#005830] text-white font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Accept Request</span>
-                            </button>
-                          ) : (
-                            <span className="text-emerald-700 font-black flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Token: {req.tokenNumber}</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Doctors Live Status Roster */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-black text-[#0f2e5a]">Hospital Doctors Roster</h3>
-                      <p className="text-xs text-slate-500">Live consulting status & schedule</p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        resetDoctorForm();
-                        setIsAddDoctorModalOpen(true);
-                      }}
-                      className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add New Doctor</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {doctorsList.map((doc) => (
-                      <div key={doc.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200 flex flex-col justify-between gap-2 text-xs">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-black text-[#0f2e5a]">{doc.name}</div>
-                            <div className="text-[10px] text-emerald-700 font-bold">{doc.speciality}</div>
-                            <div className="text-[10px] text-slate-500">{doc.designation}</div>
-                          </div>
-                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                            doc.status === 'Active' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                            doc.status === 'On Leave' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {doc.status || 'Active'}
-                          </span>
-                        </div>
-
-                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
-                          <span>{doc.opdTimings}</span>
-                          <button
-                            onClick={() => handleToggleDoctorStatus(doc.id)}
-                            className="text-blue-700 hover:underline font-bold cursor-pointer"
-                          >
-                            Toggle Status
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Hospital Details & Emergency Hotline */}
-              <div className="space-y-6">
-                <div className="bg-gradient-to-br from-[#0a2540] to-[#0f3b6c] text-white rounded-2xl p-5 shadow-md space-y-4">
-                  <div className="flex items-center gap-3 border-b border-white/20 pb-3">
-                    <Building2 className="w-6 h-6 text-emerald-400" />
-                    <div>
-                      <h4 className="text-sm font-black">{currentHospital.shortName}</h4>
-                      <p className="text-[11px] text-blue-200">Registered Empanelled Facility</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <span className="text-[10px] text-blue-300 uppercase block">Address</span>
-                      <p className="font-semibold text-white">{currentHospital.address}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-blue-300 uppercase block">Emergency 24x7 Hotline</span>
-                      <p className="font-bold text-amber-300">{currentHospital.emergencyPhone || currentHospital.phone}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-blue-300 uppercase block">Ayudh Cashless Desk</span>
-                      <p className="font-semibold text-emerald-300">Counter No. 4 (Ground Floor, Main Reception)</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Facilities List */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-                  <h4 className="text-xs font-black text-[#0f2e5a] uppercase tracking-wide">Key Facilities & ICU</h4>
-                  <div className="space-y-2 text-xs">
-                    {currentHospital.facilities?.map((fac, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-slate-700">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>{fac}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: DOCTOR ROSTER MANAGEMENT (ADD / UPDATE / DELETE DOCTORS) */}
-        {activeTab === 'doctors_management' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-[#0f2e5a]">Hospital Doctors Roster Management</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Add, update, or remove senior doctors, edit consulting hours, rooms, and consultation fees for {currentHospital.name}.
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  resetDoctorForm();
-                  setIsAddDoctorModalOpen(true);
-                }}
-                className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Add Senior Doctor</span>
-              </button>
-            </div>
-
-            {/* Doctors Table / Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {doctorsList.map((doc) => (
-                <div 
-                  key={doc.id}
-                  className="bg-white rounded-2xl border border-slate-200 hover:border-emerald-500 p-5 shadow-xs space-y-3 flex flex-col justify-between transition-all"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-black text-[#0f2e5a]">{doc.name}</h3>
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded">
-                          {doc.speciality}
-                        </span>
-                      </div>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        doc.status === 'Active' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
-                        doc.status === 'On Leave' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {doc.status || 'Active'}
-                      </span>
-                    </div>
-
-                    <p className="text-xs font-semibold text-slate-700">{doc.designation}</p>
-                    <p className="text-[11px] text-slate-500">{doc.qualification} • {doc.experienceYears} yrs experience</p>
-
-                    <div className="bg-slate-50 rounded-xl p-2.5 text-xs space-y-1 border border-slate-100">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 text-[10px] uppercase font-bold">OPD Timings:</span>
-                        <span className="font-semibold text-slate-700 text-[11px]">{doc.opdTimings}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 text-[10px] uppercase font-bold">Room No:</span>
-                        <span className="font-bold text-emerald-700 text-[11px]">{doc.roomNumber || 'Suite 101'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 text-[10px] uppercase font-bold">Consultation Fee:</span>
-                        <span className="font-black text-slate-900 text-[11px]">₹{doc.consultationFee || 500}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Doctor Card Action Buttons: Edit, Toggle Status, Delete */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => handleToggleDoctorStatus(doc.id)}
-                      className="text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
-                    >
-                      Toggle Duty
-                    </button>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenEditDoctor(doc)}
-                        className="text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setSelectedDoctorForDelete(doc);
-                          setIsDeleteDoctorModalOpen(true);
-                        }}
-                        className="text-[11px] font-bold text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: PATIENT VISIT REQUESTS MANAGEMENT */}
-        {activeTab === 'visit_requests' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-[#0f2e5a]">Hospital Visit Requests Management</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Accept visit requests, assign doctor OPD rooms and token numbers, or reschedule consultations.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500">Filter Status:</span>
-                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-1 rounded-lg">
-                  {hospitalVisitRequests.length} Total Requests
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {hospitalVisitRequests.map((req) => (
-                <div
-                  key={req.id}
-                  className={`bg-white rounded-2xl border transition-all p-5 shadow-xs space-y-3 ${
-                    req.status === 'Accepted' ? 'border-emerald-300' : 'border-amber-300'
+      <div className="w-full flex-1 flex p-3 sm:p-4 gap-4 items-start">
+        <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} shrink-0 transition-all duration-200 space-y-3 sticky top-16 hidden md:block`}>
+          <div className="bg-white rounded-lg border border-slate-200 p-2 shadow-sm space-y-1">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeNav === item.label;
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => navigate(item.label)}
+                  title={item.label}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    active ? 'bg-[#152e4d] text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white ${
-                        req.status === 'Accepted' ? 'bg-emerald-600' : 'bg-amber-500'
-                      }`}>
-                        {req.status === 'Accepted' ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-500">REQ #{req.requestId}</span>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
-                            req.status === 'Accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800 animate-pulse'
-                          }`}>
-                            {req.status}
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-black text-[#0f2e5a] mt-0.5">
-                          {req.patientName} • Ph: {req.patientPhone} (Age: {req.patientAge}, {req.patientGender})
-                        </h4>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {req.status === 'Pending' ? (
-                        <button
-                          onClick={() => handleOpenAcceptModal(req)}
-                          className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Accept & Issue Token</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setSelectedPatientForRx({
-                              name: req.patientName,
-                              phone: req.patientPhone,
-                              age: req.patientAge,
-                              gender: req.patientGender,
-                              token: req.tokenNumber,
-                              department: req.department
-                            });
-                            setActiveTab('opd_consultations');
-                          }}
-                          className="bg-[#0f2e5a] hover:bg-[#0a2040] text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-                        >
-                          <Stethoscope className="w-4 h-4 text-emerald-400" />
-                          <span>Start OPD Consultation</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Visit Request Info Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Requested Department</span>
-                      <div className="font-bold text-slate-800 mt-0.5">{req.department}</div>
-                      <div className="text-[11px] text-emerald-700 font-semibold">{req.doctorName || 'Senior Duty Specialist'}</div>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Requested Slot</span>
-                      <div className="font-bold text-slate-800 mt-0.5">{req.preferredDate}</div>
-                      <div className="text-[11px] text-slate-500">{req.preferredTimeSlot}</div>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Token & Room Allotted</span>
-                      {req.tokenNumber ? (
-                        <>
-                          <div className="font-black text-emerald-700 mt-0.5">{req.tokenNumber}</div>
-                          <div className="text-[11px] text-slate-600">{req.reportingRoom}</div>
-                        </>
-                      ) : (
-                        <span className="text-amber-600 font-semibold italic">Pending Token Generation</span>
-                      )}
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] font-bold uppercase">Ayudh Card Privilege</span>
-                      <div className="font-bold text-emerald-800 mt-0.5">✓ Cashless Empanelled</div>
-                      <div className="text-[10px] text-slate-500">ID: {req.patientId}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700 border border-slate-100">
-                    <strong>Symptoms / Reason:</strong> {req.chiefComplaint || (req.symptoms ? req.symptoms.join(', ') : 'General OPD Consultation')}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: DOCTOR OPD CONSULTATION & PRESCRIPTIONS (Identical Doctor Functionality) */}
-        {activeTab === 'opd_consultations' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-[#0f2e5a]">Doctor OPD Consultation & Digital Prescriptions</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Write clinical findings, prescribe medications, order lab investigations, and issue official digital Rx slips.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-600">Active Consulting Doctor:</span>
-                <span className="bg-blue-100 text-blue-900 text-xs font-black px-3 py-1 rounded-xl">
-                  {doctorsList[0]?.name || 'Dr. V. Rajeshwar Rao'}
-                </span>
-              </div>
-            </div>
-
-            {/* OPD Consultation Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left: Patient Info & Vitals */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-                <h3 className="text-xs font-black text-[#0f2e5a] uppercase tracking-wide border-b pb-2">
-                  Active OP Patient
-                </h3>
-
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 text-[10px] uppercase font-bold block">Patient Name</span>
-                    <span className="text-base font-black text-slate-900">
-                      {selectedPatientForRx?.name || 'Ramesh Kumar'}
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-500'}`} />
+                    {sidebarOpen && <span className="truncate">{item.label}</span>}
+                  </span>
+                  {sidebarOpen && item.count !== undefined && (
+                    <span className={`${active ? 'bg-white/15 text-white' : 'bg-blue-100 text-blue-800'} w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center`}>
+                      {item.count}
                     </span>
-                    <div className="text-[11px] text-emerald-700 font-bold">
-                      Ayudh Patient ID: AVP100245 (Gold Member)
-                    </div>
-                  </div>
+                  )}
+                  {sidebarOpen && item.badge && (
+                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[9px] font-black">{item.badge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-slate-50 p-2 rounded-lg">
-                      <span className="text-slate-400 text-[10px] uppercase block">Age / Gender</span>
-                      <span className="font-bold">42 yrs / Male</span>
-                    </div>
-                    <div className="bg-slate-50 p-2 rounded-lg">
-                      <span className="text-slate-400 text-[10px] uppercase block">Blood Group</span>
-                      <span className="font-bold text-red-600">B+ve</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-slate-50 p-2 rounded-lg">
-                      <span className="text-slate-400 text-[10px] uppercase block">Blood Pressure</span>
-                      <span className="font-bold text-slate-800">128/84 mmHg</span>
-                    </div>
-                    <div className="bg-slate-50 p-2 rounded-lg">
-                      <span className="text-slate-400 text-[10px] uppercase block">Pulse / SpO2</span>
-                      <span className="font-bold text-slate-800">76 bpm / 98%</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-[11px] text-amber-900">
-                    <strong>Allergies:</strong> Penicillin allergic. No NSAID intolerance noted.
-                  </div>
-                </div>
+          {sidebarOpen && (
+            <div className="bg-[#132d4b] text-white rounded-lg p-3 shadow-sm text-center">
+              <div className="w-8 h-8 mx-auto rounded-full bg-blue-500/20 text-blue-200 flex items-center justify-center mb-2">
+                <Headphones className="w-4 h-4" />
               </div>
-
-              {/* Right 2 Cols: Prescription Editor & Form */}
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-                <h3 className="text-xs font-black text-[#0f2e5a] uppercase tracking-wide border-b pb-2 flex items-center justify-between">
-                  <span>Clinical Prescription & Diet Advice</span>
-                  <span className="text-emerald-700 font-bold">OP Token: KIMS-CARD-08</span>
-                </h3>
-
-                <div className="space-y-4 text-xs">
-                  {/* Diagnosis */}
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">Clinical Diagnosis & Findings *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Essential Hypertension, Atypical Chest Discomfort, Normal Baseline ECG"
-                      value={rxDiagnosis}
-                      onChange={(e) => setRxDiagnosis(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-medium"
-                    />
-                  </div>
-
-                  {/* Medicines List */}
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">Prescribed Medications</label>
-                    <div className="space-y-2 mb-3">
-                      {rxMedicines.map((med, idx) => (
-                        <div key={idx} className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 flex items-center justify-between gap-2">
-                          <div>
-                            <div className="font-black text-slate-900">{med.name}</div>
-                            <div className="text-[10px] text-slate-600">{med.dosage} • Duration: {med.duration}</div>
-                          </div>
-                          <button
-                            onClick={() => setRxMedicines(prev => prev.filter((_, i) => i !== idx))}
-                            className="text-red-500 hover:text-red-700 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add Medicine Mini Form */}
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-200">
-                      <div className="sm:col-span-5">
-                        <input
-                          type="text"
-                          placeholder="Medicine name (e.g. Tab. Telmisartan 40mg)"
-                          value={rxNewMedName}
-                          onChange={(e) => setRxNewMedName(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-                      <div className="sm:col-span-4">
-                        <input
-                          type="text"
-                          placeholder="Dosage (e.g. 1-0-0 After food)"
-                          value={rxNewMedDosage}
-                          onChange={(e) => setRxNewMedDosage(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-                      <div className="sm:col-span-3 flex gap-1">
-                        <button
-                          type="button"
-                          onClick={handleAddMedicineToRx}
-                          className="w-full bg-[#00703c] text-white font-bold py-1.5 rounded-lg text-xs hover:bg-[#005830] transition-all cursor-pointer"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Advice & Follow up */}
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">Doctor Advice & Follow-Up</label>
-                    <textarea
-                      rows={2}
-                      value={rxAdvice}
-                      onChange={(e) => setRxAdvice(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-medium"
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-3 pt-2">
-                    <button
-                      onClick={() => {
-                        setIsRxGenerated(true);
-                        showToast('Digital Prescription generated and synchronized to Patient Health Records!');
-                      }}
-                      className="bg-[#00703c] hover:bg-[#005830] text-white font-black px-6 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Issue & Print Digital Rx</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <h3 className="text-xs font-black">Need Help?</h3>
+              <p className="text-[10px] text-slate-300 font-semibold mb-3">Hospital operations support</p>
+              <button onClick={() => navigate('Support')} className="w-full bg-white text-slate-950 rounded-lg py-2 text-xs font-black cursor-pointer">Contact Support</button>
             </div>
+          )}
+        </aside>
+
+        <main className="flex-1 min-w-0 space-y-4">
+          <div className="md:hidden bg-white border border-slate-200 rounded-lg p-2 flex gap-2 overflow-x-auto">
+            {navItems.slice(0, 8).map((item) => (
+              <button key={item.label} onClick={() => navigate(item.label)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-black ${activeNav === item.label ? 'bg-[#152e4d] text-white' : 'bg-slate-50 text-slate-700'}`}>
+                {item.label}
+              </button>
+            ))}
           </div>
-        )}
+          {activeNav === 'Dashboard' ? renderDashboard() : renderGenericPanel()}
+        </main>
+      </div>
 
-        {/* TAB 5: AYUDH SMART CARD VERIFICATION */}
-        {activeTab === 'member_verification' && (
-          <div className="space-y-6">
-            <PatientVerificationSection />
-          </div>
-        )}
-
-      </main>
-
-      {/* MODAL 1: ADD SENIOR DOCTOR */}
-      {isAddDoctorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-black text-[#0f2e5a]">Add New Senior Doctor to Roster</h3>
+      {doctorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={saveDoctor} className="bg-white rounded-lg shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-black text-slate-950">{editingDoctorId ? 'Edit Doctor' : 'Add Doctor'}</h2>
+                <p className="text-xs font-semibold text-slate-500">{currentHospital.name}</p>
               </div>
-              <button
-                onClick={() => setIsAddDoctorModalOpen(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
+              <button type="button" onClick={() => setDoctorModalOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center cursor-pointer">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveNewDoctor} className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Doctor Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Dr. A. Madhava Rao"
-                    value={docName}
-                    onChange={(e) => setDocName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Speciality *</label>
-                  <select
-                    value={docSpeciality}
-                    onChange={(e) => setDocSpeciality(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-semibold cursor-pointer"
-                  >
-                    {SPECIALITIES.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Designation *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Senior Consultant Cardiologist & HOD"
-                    value={docDesignation}
-                    onChange={(e) => setDocDesignation(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Qualifications *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. MBBS, MD, DM, FSCAI"
-                    value={docQualification}
-                    onChange={(e) => setDocQualification(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Experience (Yrs) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={docExperience}
-                    onChange={(e) => setDocExperience(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">OPD Room No *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. OPD Suite 104"
-                    value={docRoomNumber}
-                    onChange={(e) => setDocRoomNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Consultation Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={docConsultationFee}
-                    onChange={(e) => setDocConsultationFee(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">OPD Consulting Hours *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Mon - Sat: 09:30 AM - 02:30 PM"
-                  value={docOpdTimings}
-                  onChange={(e) => setDocOpdTimings(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Initial Status</label>
+            <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <Field label="Doctor Name" required value={doctorForm.name} onChange={(value) => setDoctorForm({ ...doctorForm, name: value })} />
+              <Field label="Designation" value={doctorForm.designation} onChange={(value) => setDoctorForm({ ...doctorForm, designation: value })} />
+              <label className="space-y-1">
+                <span className="font-black text-slate-700">Speciality</span>
                 <select
-                  value={docStatus}
-                  onChange={(e) => setDocStatus(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer"
+                  value={doctorForm.speciality}
+                  onChange={(event) => setDoctorForm({ ...doctorForm, speciality: event.target.value })}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="Active">Active (On Duty in OPD)</option>
-                  <option value="On Leave">On Leave</option>
-                  <option value="Emergency Only">Emergency On-Call Only</option>
+                  {SPECIALITIES.map((speciality) => <option key={speciality} value={speciality}>{speciality}</option>)}
                 </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddDoctorModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-[#00703c] hover:bg-[#005830] text-white font-black px-6 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  Add Doctor
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: EDIT DOCTOR */}
-      {isEditDoctorModalOpen && selectedDoctorForEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-black text-[#0f2e5a]">Edit Doctor Information</h3>
-              </div>
-              <button
-                onClick={() => setIsEditDoctorModalOpen(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveUpdatedDoctor} className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Doctor Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={docName}
-                    onChange={(e) => setDocName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Speciality *</label>
-                  <select
-                    value={docSpeciality}
-                    onChange={(e) => setDocSpeciality(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer"
-                  >
-                    {SPECIALITIES.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Designation</label>
-                  <input
-                    type="text"
-                    value={docDesignation}
-                    onChange={(e) => setDocDesignation(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Qualifications</label>
-                  <input
-                    type="text"
-                    value={docQualification}
-                    onChange={(e) => setDocQualification(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Experience (Yrs)</label>
-                  <input
-                    type="number"
-                    value={docExperience}
-                    onChange={(e) => setDocExperience(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">OPD Room No</label>
-                  <input
-                    type="text"
-                    value={docRoomNumber}
-                    onChange={(e) => setDocRoomNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Consultation Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={docConsultationFee}
-                    onChange={(e) => setDocConsultationFee(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">OPD Consulting Hours</label>
-                <input
-                  type="text"
-                  value={docOpdTimings}
-                  onChange={(e) => setDocOpdTimings(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Status</label>
+              </label>
+              <Field label="Qualification" value={doctorForm.qualification} onChange={(value) => setDoctorForm({ ...doctorForm, qualification: value })} />
+              <Field label="Experience Years" type="number" value={doctorForm.experienceYears} onChange={(value) => setDoctorForm({ ...doctorForm, experienceYears: value })} />
+              <Field label="Consultation Fee" type="number" value={doctorForm.consultationFee} onChange={(value) => setDoctorForm({ ...doctorForm, consultationFee: value })} />
+              <Field label="OPD Timings" value={doctorForm.opdTimings} onChange={(value) => setDoctorForm({ ...doctorForm, opdTimings: value })} />
+              <Field label="Room Number" value={doctorForm.roomNumber} onChange={(value) => setDoctorForm({ ...doctorForm, roomNumber: value })} />
+              <Field label="Phone" value={doctorForm.phone} onChange={(value) => setDoctorForm({ ...doctorForm, phone: value })} />
+              <Field label="Email" type="email" value={doctorForm.email} onChange={(value) => setDoctorForm({ ...doctorForm, email: value })} />
+              <label className="space-y-1 md:col-span-2">
+                <span className="font-black text-slate-700">Duty Status</span>
                 <select
-                  value={docStatus}
-                  onChange={(e) => setDocStatus(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer"
+                  value={doctorForm.status}
+                  onChange={(event) => setDoctorForm({ ...doctorForm, status: event.target.value as NonNullable<SeniorDoctor['status']> })}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="Active">Active (On Duty)</option>
-                  <option value="On Leave">On Leave</option>
-                  <option value="Emergency Only">Emergency Only</option>
+                  <option>Active</option>
+                  <option>On Leave</option>
+                  <option>Emergency Only</option>
+                  <option>In OPD</option>
                 </select>
-              </div>
+              </label>
+            </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsEditDoctorModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-black px-6 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="border-t border-slate-200 px-5 py-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setDoctorModalOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 cursor-pointer">Cancel</button>
+              <button type="submit" className="rounded-lg bg-[#00703c] px-4 py-2 text-xs font-black text-white cursor-pointer">{editingDoctorId ? 'Save Doctor' : 'Create Doctor'}</button>
+            </div>
+          </form>
         </div>
       )}
-
-      {/* MODAL 3: DELETE DOCTOR CONFIRMATION */}
-      {isDeleteDoctorModalOpen && selectedDoctorForDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
-              <Trash2 className="w-6 h-6" />
-            </div>
-
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-black text-slate-900">Remove Doctor from Roster?</h3>
-              <p className="text-xs text-slate-500">
-                Are you sure you want to remove <strong>{selectedDoctorForDelete.name}</strong> ({selectedDoctorForDelete.speciality}) from {currentHospital.shortName}?
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                onClick={() => setIsDeleteDoctorModalOpen(false)}
-                className="flex-1 bg-slate-100 text-slate-700 text-xs font-bold py-2.5 rounded-xl hover:bg-slate-200 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteDoctor}
-                className="flex-1 bg-red-600 text-white text-xs font-black py-2.5 rounded-xl hover:bg-red-700 cursor-pointer"
-              >
-                Yes, Remove Doctor
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: ACCEPT VISIT REQUEST & ALLOT TOKEN */}
-      {selectedRequestForAccept && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-sm font-black text-[#0f2e5a]">Accept Patient Visit Request</h3>
-              </div>
-              <button
-                onClick={() => setSelectedRequestForAccept(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmAcceptRequest} className="space-y-3 text-xs">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                <div className="font-bold text-slate-800">Patient: {selectedRequestForAccept.patientName}</div>
-                <div className="text-slate-500">Dept: {selectedRequestForAccept.department} • {selectedRequestForAccept.preferredDate}</div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Assign Senior Doctor *</label>
-                <select
-                  value={assignDoctorName}
-                  onChange={(e) => setAssignDoctorName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer"
-                >
-                  {doctorsList.map(d => (
-                    <option key={d.id} value={d.name}>{d.name} ({d.speciality} - {d.roomNumber})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Generated Token No *</label>
-                  <input
-                    type="text"
-                    required
-                    value={assignTokenNumber}
-                    onChange={(e) => setAssignTokenNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-emerald-700"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Reporting Room *</label>
-                  <input
-                    type="text"
-                    required
-                    value={assignRoom}
-                    onChange={(e) => setAssignRoom(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">Instructions for Patient</label>
-                <textarea
-                  rows={2}
-                  value={acceptNotes}
-                  onChange={(e) => setAcceptNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedRequestForAccept(null)}
-                  className="px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-[#00703c] hover:bg-[#005830] text-white font-black px-5 py-2 rounded-xl transition-all shadow-xs cursor-pointer"
-                >
-                  Confirm & Notify Patient
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };

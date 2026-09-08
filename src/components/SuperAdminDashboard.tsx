@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AdminHealthCampsPage } from './AdminHealthCampsPage';
+import { AdminRoleManagement } from './AdminRoleManagement';
 import { useLiveData } from '../context/LiveDataContext';
+import { api } from '../lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -65,7 +67,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   onLogout,
   onNavigateHome
 }) => {
-  const { collections, create, stats } = useLiveData();
+  const { collections, create, update, remove, stats } = useLiveData();
   // Navigation & Sub-section states
   const [activeNav, setActiveNav] = useState('Dashboard');
   const [expandedSection, setExpandedSection] = useState<{ [key: string]: boolean }>({
@@ -89,6 +91,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [showGenerateReportModal, setShowGenerateReportModal] = useState(false);
   const [showViewAllEnquiriesModal, setShowViewAllEnquiriesModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('All');
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [newUser, setNewUser] = useState({ name: '', email: '', phone: '', role: 'patient', password: 'Password@123', status: 'Active' });
 
   // Form states
   const [newDoctorName, setNewDoctorName] = useState('');
@@ -119,6 +126,50 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const loadAdminUsers = async () => {
+    try {
+      const res = await api.users();
+      setAdminUsers(res.items || []);
+    } catch (err: any) {
+      showToast(err.message || 'Unable to load users registry');
+    }
+  };
+
+  useEffect(() => {
+    if (['Users Management', 'Doctors Management', 'Hospitals Management', 'Marketing Team'].includes(activeNav)) loadAdminUsers();
+  }, [activeNav]);
+
+  const filteredAdminUsers = adminUsers.filter((item) => {
+    const haystack = `${item.name || ''} ${item.email || ''} ${item.phone || ''} ${item.role || ''}`.toLowerCase();
+    const matchesSearch = !userSearch || haystack.includes(userSearch.toLowerCase());
+    const matchesRole = userRoleFilter === 'All' || item.role === userRoleFilter;
+    return matchesSearch && matchesRole;
+  });
+
+  const handleCreateAdminUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await api.createUser(newUser);
+    setAdminUsers((prev) => [res.item, ...prev]);
+    setNewUser({ name: '', email: '', phone: '', role: 'patient', password: 'Password@123', status: 'Active' });
+    showToast('User created in database');
+  };
+
+  const handleSaveAdminUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const { id, password, ...payload } = editingUser;
+    const res = await api.updateUser(id, password ? { ...payload, password } : payload);
+    setAdminUsers((prev) => prev.map((item) => (item.id === id ? res.item : item)));
+    setEditingUser(null);
+    showToast('User updated in database');
+  };
+
+  const handleDeleteAdminUser = async (id: string) => {
+    await api.removeUser(id);
+    setAdminUsers((prev) => prev.filter((item) => item.id !== id));
+    showToast('User deleted from database');
+  };
+
   const toggleSection = (section: string) => {
     setExpandedSection(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -136,6 +187,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       />
     );
   }
+
+  const isRoleManagementNav = ['Users Management', 'Doctors Management', 'Hospitals Management', 'Marketing Team'].includes(activeNav);
 
   return (
     <div className="min-h-screen bg-[#f0f4f9] font-sans text-slate-800 flex flex-col selection:bg-blue-600 selection:text-white">
@@ -385,7 +438,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
 
                   <button
-                    onClick={() => { setActiveNav('Doctors Management'); setShowAddDoctorModal(true); }}
+                    onClick={() => setActiveNav('Doctors Management')}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Doctors Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -395,7 +448,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
 
                   <button
-                    onClick={() => { setActiveNav('Hospitals Management'); setShowAddHospitalModal(true); }}
+                    onClick={() => setActiveNav('Hospitals Management')}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Hospitals Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -415,7 +468,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
 
                   <button
-                    onClick={() => { setActiveNav('Marketing Team'); showToast('Routing to Marketing Team Analytics'); }}
+                    onClick={() => setActiveNav('Marketing Team')}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Marketing Team' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -668,6 +721,121 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               </button>
             </div>
           </div>
+
+          {isRoleManagementNav ? (
+            <AdminRoleManagement
+              activeNav={activeNav}
+              users={adminUsers}
+              onUsersChanged={setAdminUsers}
+              onToast={showToast}
+            />
+          ) : (
+            <>
+
+          {activeNav === 'Users Management' && (
+            <section className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Registered Users Registry</h3>
+                  <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                    View every role account and perform database CRUD operations from one admin screen.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search name, phone, email"
+                      className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold min-w-[220px]"
+                    />
+                  </div>
+                  <select
+                    value={userRoleFilter}
+                    onChange={(e) => setUserRoleFilter(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs font-black cursor-pointer"
+                  >
+                    {['All', 'patient', 'doctor', 'hospital', 'marketing', 'admin', 'ambulance', 'lab', 'volunteer', 'social_organizer'].map((role) => (
+                      <option key={role} value={role}>{role === 'All' ? 'All Roles' : role}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={loadAdminUsers}
+                    className="px-3 py-2 rounded-lg bg-[#0f2e5a] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-emerald-300" />
+                    Sync
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateAdminUser} className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-6 gap-2 text-xs">
+                <input required value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Full name" className="px-3 py-2 rounded-lg border border-slate-200 font-semibold" />
+                <input value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="Email" className="px-3 py-2 rounded-lg border border-slate-200 font-semibold" />
+                <input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="Phone" className="px-3 py-2 rounded-lg border border-slate-200 font-semibold" />
+                <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="px-3 py-2 rounded-lg border border-slate-200 font-black">
+                  {['patient', 'doctor', 'hospital', 'marketing', 'admin', 'ambulance', 'lab', 'volunteer', 'social_organizer'].map((role) => <option key={role}>{role}</option>)}
+                </select>
+                <input required value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Temp password" className="px-3 py-2 rounded-lg border border-slate-200 font-semibold" />
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black flex items-center justify-center gap-1.5 cursor-pointer">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add User
+                </button>
+              </form>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100 text-slate-500 uppercase text-[10px] font-black">
+                    <tr>
+                      <th className="text-left px-4 py-2">User</th>
+                      <th className="text-left px-4 py-2">Role</th>
+                      <th className="text-left px-4 py-2">Contact</th>
+                      <th className="text-left px-4 py-2">Payment / Plan</th>
+                      <th className="text-right px-4 py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredAdminUsers.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <div className="font-black text-slate-900">{item.name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{item.id}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-md bg-blue-50 text-blue-700 border border-blue-100 px-2 py-1 text-[10px] font-black uppercase">{item.role}</span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 font-semibold">
+                          <div>{item.phone || 'No phone'}</div>
+                          <div className="text-[10px] text-slate-400">{item.email || 'No email'}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 font-bold">
+                          {item.subscriptionPlan ? `${item.subscriptionPlan} - Rs. ${item.subscriptionAmount}` : item.donationAmount ? `Donation Rs. ${item.donationAmount}` : 'Not captured'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => setEditingUser({ ...item, password: '' })} className="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-black flex items-center gap-1 cursor-pointer">
+                              <Edit className="w-3 h-3" />
+                              Edit
+                            </button>
+                            <button onClick={() => handleDeleteAdminUser(item.id)} className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 font-black flex items-center gap-1 cursor-pointer">
+                              <Trash2 className="w-3 h-3" />
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredAdminUsers.length && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500 font-bold">No users found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* ===================================================================== */}
           {/* ROW 1: TOP 6 STAT CARDS (Exact values and icons from Image) */}
@@ -1535,6 +1703,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
           </footer>
 
+            </>
+          )}
+
         </main>
 
       </div>
@@ -1542,6 +1713,65 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
       {/* ========================================================================= */}
       {/* INTERACTIVE MODAL 1: ADD DOCTOR */}
       {/* ========================================================================= */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-600" />
+                <h3 className="text-sm font-black text-slate-900">Edit Registered User</h3>
+              </div>
+              <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer">
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdminUser} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Name</label>
+                  <input required value={editingUser.name || ''} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-semibold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Role</label>
+                  <select value={editingUser.role || 'patient'} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-black">
+                    {['patient', 'doctor', 'hospital', 'marketing', 'admin', 'ambulance', 'lab', 'volunteer', 'social_organizer'].map((role) => <option key={role}>{role}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Phone</label>
+                  <input value={editingUser.phone || ''} onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-semibold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Email</label>
+                  <input value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-semibold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Status</label>
+                  <select value={editingUser.status || 'Active'} onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-black">
+                    <option>Active</option>
+                    <option>Pending</option>
+                    <option>Suspended</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">New Password</label>
+                  <input value={editingUser.password || ''} onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })} placeholder="Leave blank to keep" className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 font-semibold" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white font-black cursor-pointer">Save User</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showAddDoctorModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
