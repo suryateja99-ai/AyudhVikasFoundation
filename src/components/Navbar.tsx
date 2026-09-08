@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PhoneCall, ChevronDown, Menu, X, ShieldAlert, HeartPulse } from 'lucide-react';
+import { PhoneCall, ChevronDown, Menu, X, HeartPulse, UserCheck, UserPlus } from 'lucide-react';
 import { ActiveModal } from '../types';
 
 interface NavbarProps {
@@ -94,44 +94,70 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal, activeTab, setActiv
   return (
     <header className="bg-white shadow-md sticky top-0 z-40 border-b border-slate-200">
       {/* Top Main Branding Header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3 flex items-center justify-between gap-4">
+      <div className="w-full px-4 sm:px-8 lg:px-14 py-3 flex items-center justify-between gap-4">
         
         {/* Left: Foundation Logo */}
         <div 
           onClick={() => setActiveTab('home')}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex items-center gap-3 cursor-pointer group min-w-0"
         >
-          <div className="w-12 h-12 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-2 text-emerald-700 shadow-sm group-hover:bg-emerald-100 transition-all">
-            <HeartPulse className="w-8 h-8 text-emerald-600" />
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-2 text-emerald-700 shadow-sm group-hover:bg-emerald-100 transition-all shrink-0">
+            <HeartPulse className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600" />
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-xl sm:text-2xl font-black text-[#0f2e5a] tracking-tight leading-tight uppercase font-sans">
-              AYUDH VIKAS
-            </h1>
-            <span className="text-xs sm:text-sm font-extrabold text-[#006633] tracking-wide uppercase">
-              FOUNDATION
-            </span>
-            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 tracking-wider uppercase border-t border-emerald-200 mt-0.5 pt-0.5">
-              CARE BEYOND BOUNDARIES
+          <div className="flex flex-col min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              <h1 className="text-lg sm:text-2xl font-black text-[#0f2e5a] leading-none uppercase font-sans">
+                AYUDH VIKAS
+              </h1>
+              <span className="text-lg sm:text-2xl font-black text-[#006633] leading-none uppercase">
+                FOUNDATION
+              </span>
+              <span className="hidden sm:inline text-slate-300 font-black">|</span>
+              <span className="hidden sm:inline text-[11px] font-black text-emerald-700 uppercase tracking-wide">
+                Healthcare Support
+              </span>
+            </div>
+            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 uppercase tracking-wide mt-1">
+              Care Beyond Boundaries
             </span>
           </div>
         </div>
 
         {/* Center: Health Care Network Title */}
-        <div className="hidden lg:flex flex-col items-center text-center px-4">
-          <div className="text-base font-extrabold text-[#0275d8] tracking-wide uppercase border-b-2 border-emerald-500 pb-0.5">
+        <div className="hidden lg:flex flex-col items-center text-center px-4 flex-1">
+          <div className="text-2xl xl:text-3xl font-black text-[#0870cf] tracking-[0.08em] uppercase border-b-2 border-emerald-500 pb-0.5 leading-none">
             HEALTH CARE NETWORK
           </div>
-          <p className="text-xs font-semibold text-slate-600 italic mt-1">
+          <p className="text-xs xl:text-sm font-black text-slate-600 italic mt-2">
             One Call for Complete Healthcare Support
           </p>
         </div>
 
-        {/* Right: Emergency Button */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right: Auth + Emergency Buttons */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button
+            onClick={() => {
+              if (onSignInClick) {
+                onSignInClick();
+              } else {
+                onOpenModal('patient_portal');
+              }
+            }}
+            className="hidden md:flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-black text-[#0f2e5a] shadow-sm hover:border-emerald-500 hover:text-emerald-700 transition-all cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4 text-emerald-600" />
+            <span>Sign In</span>
+          </button>
+          <button
+            onClick={() => onOpenModal('register_patient')}
+            className="hidden md:flex items-center gap-2 rounded-md border border-emerald-700 bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 transition-all cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Register Now</span>
+          </button>
           <button
             onClick={() => onOpenModal('emergency_help')}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg px-3.5 sm:px-4 py-2 flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-red-800 cursor-pointer animate-pulse"
+            className="bg-[#f0505d] hover:bg-red-600 text-white rounded-lg px-3 sm:px-4 py-2 flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-red-500 cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
               <PhoneCall className="w-4 h-4 text-white" />
@@ -143,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal, activeTab, setActiv
               <div className="text-xs font-bold text-white uppercase">
                 24x7 HELPLINE
               </div>
-              <div className="text-xs sm:text-sm font-extrabold text-amber-300 tracking-tight">
+              <div className="text-xs sm:text-sm font-extrabold text-amber-200 tracking-tight">
                 1800 123 4567
               </div>
             </div>
@@ -162,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal, activeTab, setActiv
 
       {/* Navigation Menu Bar */}
       <nav className="bg-[#f8fafc] border-t border-slate-200 hidden lg:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="w-full px-4 sm:px-8 lg:px-14">
           <ul className="flex items-center justify-between text-[11px] xl:text-xs font-extrabold text-[#0f2e5a]">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;

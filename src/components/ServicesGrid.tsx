@@ -88,8 +88,8 @@ export const ServicesGrid: React.FC<ServicesGridProps> = ({ onOpenModal }) => {
   ];
 
   return (
-    <section id="section-services" className="py-6 px-4 sm:px-8 bg-slate-50 border-b border-slate-200">
-      <div className="max-w-7xl mx-auto">
+    <section id="section-services" className="py-6 px-4 sm:px-8 lg:px-14 bg-slate-50 border-b border-slate-200">
+      <div className="w-full">
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           
