@@ -40,11 +40,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; mode: string; postgres: boolean; counts: Record<string, number> }>('/api/health'),
+  health: () => request<{ ok: boolean; mode: string; mongodb: boolean; counts: Record<string, number> }>('/api/health'),
   bootstrap: () =>
     request<{
       mode: string;
-      postgres: boolean;
+      mongodb: boolean;
       hospitals: any[];
       doctors: any[];
       health_camps: any[];
