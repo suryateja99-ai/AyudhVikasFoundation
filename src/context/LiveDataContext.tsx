@@ -60,7 +60,7 @@ interface LiveDataValue {
   collections: Collections;
   stats: Record<string, number>;
   mode: string;
-  postgres: boolean;
+  mongodb: boolean;
   connected: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
@@ -82,7 +82,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [collections, setCollections] = useState<Collections>(EMPTY);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [mode, setMode] = useState('connecting');
-  const [postgres, setPostgres] = useState(false);
+  const [mongodb, setMongodb] = useState(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const streamRef = useRef<EventSource | null>(null);
@@ -99,7 +99,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const boot = await api.bootstrap();
       setMode(boot.mode);
-      setPostgres(boot.postgres);
+      setMongodb(boot.mongodb);
       setStats(boot.stats || {});
       const entries = await Promise.all(
         (Object.keys(EMPTY) as CollectionName[]).map(async (name) => {
@@ -171,7 +171,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       collections,
       stats,
       mode,
-      postgres,
+      mongodb,
       connected,
       loading,
       refresh,
@@ -179,7 +179,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       update,
       remove,
     }),
-    [collections, stats, mode, postgres, connected, loading, refresh, create, update, remove]
+    [collections, stats, mode, mongodb, connected, loading, refresh, create, update, remove]
   );
 
   return <LiveDataContext.Provider value={value}>{children}</LiveDataContext.Provider>;

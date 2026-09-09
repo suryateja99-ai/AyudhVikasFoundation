@@ -80,17 +80,17 @@ app.use(authOptional);
 
 app.get('/api/health', async (_req, res) => {
   const counts = db ? await db.counts() : {};
-  const status = db ? db.status() : { mode: 'starting', postgres: false, configured: false };
+  const status = db ? db.status() : { mode: 'starting', mongodb: false, configured: false };
   res.json({
     ok: true,
     ...status,
-    postgres: status.postgres,
+    mongodb: status.mongodb,
     counts,
-    hint: status.postgres
-      ? 'PostgreSQL is connected and in use.'
+    hint: status.mongodb
+      ? 'MongoDB is connected and in use.'
       : status.configured
-        ? `PostgreSQL URL is set but the connection failed${status.error ? `: ${status.error}` : ''}. The app is using the local store until it succeeds.`
-        : 'Paste DATABASE_URL in .env to connect PostgreSQL. Until then the app uses a local JSON store.',
+        ? `MongoDB URI is set but the connection failed${status.error ? `: ${status.error}` : ''}. The app is using the local store until it succeeds.`
+        : 'Paste MONGODB_URI in .env to connect MongoDB. Until then the app uses a local JSON store.',
   });
 });
 
@@ -267,7 +267,7 @@ app.get('/api/bootstrap', async (_req, res) => {
   ]);
   res.json({
     mode: db.mode(),
-    postgres: db.postgresReady(),
+    mongodb: db.mongoReady(),
     hospitals,
     doctors,
     health_camps,
@@ -276,7 +276,7 @@ app.get('/api/bootstrap', async (_req, res) => {
 });
 
 app.get('/api/stats', async (_req, res) => {
-  res.json({ mode: db.mode(), postgres: db.postgresReady(), ...(await db.counts()) });
+  res.json({ mode: db.mode(), mongodb: db.mongoReady(), ...(await db.counts()) });
 });
 
 app.get('/api/users', adminRequired, async (req, res) => {
@@ -585,13 +585,13 @@ async function start() {
   server.listen(PORT, '0.0.0.0', () => {
     const status = db.status();
     console.log(`[api] Ayudh Vikas API listening on http://localhost:${PORT}`);
-    if (status.postgres) {
-      console.log(`[db] PostgreSQL connected (${status.target})`);
+    if (status.mongodb) {
+      console.log(`[db] MongoDB connected (${status.target})`);
     } else if (status.configured) {
-      console.log(`[db] PostgreSQL URL is set but connection failed: ${status.error}`);
-      console.log('[db] Using local JSON store until PostgreSQL is reachable.');
+      console.log(`[db] MongoDB URI is set but connection failed: ${status.error}`);
+      console.log('[db] Using local JSON store until MongoDB is reachable.');
     } else {
-      console.log('[db] No DATABASE_URL yet — using local JSON store. Paste credentials in .env when ready.');
+      console.log('[db] No MONGODB_URI yet - using local JSON store. Paste credentials in .env when ready.');
     }
     console.log(`[web] Open the site at http://localhost:${VITE_PORT}`);
   });

@@ -1,8 +1,8 @@
-# Ayudh Vikas Foundation — Healthcare Network App
+# Ayudh Vikas Foundation - Healthcare Network App
 
-The public portal, patient, doctor, hospital, marketing, and super-admin screens now persist through a live API. Data is stored in **PostgreSQL** when you provide credentials, and in a local JSON store until then. Socket.IO pushes create/update/delete events so dashboards stay in sync in real time.
+The public portal, patient, doctor, hospital, marketing, and super-admin screens persist through a live Express API. Data is stored in **MongoDB** when `MONGODB_URI` is configured, and in `server/local-data.json` as a local fallback.
 
-## Run locally
+## Run Locally
 
 **Prerequisites:** Node.js 20+
 
@@ -13,34 +13,56 @@ npm run dev
 
 This starts:
 
-- API + realtime server at `http://localhost:4000`
-- Vite app at `http://localhost:3000` (proxies `/api` and `/socket.io`)
+- API + realtime event stream at `http://localhost:4000`
+- Vite app at `http://localhost:3000` with `/api` proxied to the backend
 
-## Connect PostgreSQL (credentials later)
+## Connect MongoDB
 
-The app is ready for PostgreSQL. Until a URL is set it uses `server/local-data.json`.
+1. Put credentials in `.env` or `.env.local`:
 
-1. Put credentials in `.env` (copy from `.env.example` if needed):
-
-```
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/ayudh_vikas
+```env
+MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority
+MONGODB_DB=ayudh_vikas_db
 JWT_SECRET=a-long-random-secret
 PORT=4000
 ```
 
-Hosted providers (Neon, Supabase, RDS, Render) use SSL automatically. For local Postgres, no extra SSL flag is needed.
-
 2. Test the connection:
 
-```
+```bash
 npm run db:check
 ```
 
-3. Restart `npm run dev`. The API creates tables, imports any local JSON data if Postgres is empty (otherwise seeds demo data), and the top bar switches from `Live · local` to `Live DB`.
+3. Restart `npm run dev`.
 
-`GET /api/health` reports `{ postgres, configured, target, error, hint }`.
+The API creates MongoDB collections/indexes, imports existing local JSON data if MongoDB is empty, and seeds initial data when needed. The top bar switches from `Live - local` to `Live MongoDB`.
 
-## Demo logins
+`GET /api/health` reports `{ mongodb, configured, target, database, error, hint }`.
+
+## Render Deployment
+
+Use a single Render Web Service for frontend + backend:
+
+```bash
+npm install && npm run build
+```
+
+Start command:
+
+```bash
+node server/index.js
+```
+
+Set these Render environment variables:
+
+```env
+MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority
+MONGODB_DB=ayudh_vikas_db
+JWT_SECRET=a-long-random-secret
+NODE_ENV=production
+```
+
+## Demo Logins
 
 | Role | Identifier | Password |
 | --- | --- | --- |
@@ -50,25 +72,25 @@ npm run db:check
 | Marketing | `marketing@ayudhvikasfoundation.org` | `marketing123` |
 | Super Admin | `admin@ayudhvikasfoundation.org` | `admin123` |
 
-## What is live
+## What Is Live
 
-- Login / registration (all roles)
+- Login / registration for all roles
 - Doctor appointments
 - Ambulance, lab, and home-care bookings
-- Hospital visit requests (patient request → hospital accept)
+- Hospital visit requests
 - Health camps + camp registration
 - Membership, emergency, callback, and partner forms
 - Patient profile, reminders, wallet, tickets, records, feedback
 - Hospital doctor roster CRUD
 - Marketing leads
-- Super-admin add doctor / hospital / camp
+- Super-admin role management
 - Insurance applications
 - Patient ID verification against the registry
 
 ## API
 
-- `GET /api/health` — storage mode (`postgres` or `local`) and counts
+- `GET /api/health` - storage mode (`mongodb` or `local`) and counts
 - `POST /api/auth/login` / `POST /api/auth/register`
 - `GET|POST /api/records/:collection`
 - `PATCH|DELETE /api/records/:collection/:id`
-- Socket event `record:change` `{ collection, action, record }`
+- Event stream: `GET /api/stream`
