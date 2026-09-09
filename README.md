@@ -21,7 +21,7 @@ This starts:
 1. Put credentials in `.env` or `.env.local`:
 
 ```env
-MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority&tls=true
 MONGODB_DB=ayudh_vikas_db
 JWT_SECRET=a-long-random-secret
 PORT=4000
@@ -56,10 +56,11 @@ node server/index.js
 Set these Render environment variables:
 
 ```env
-MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/ayudh_vikas_db?retryWrites=true&w=majority&tls=true
 MONGODB_DB=ayudh_vikas_db
 JWT_SECRET=a-long-random-secret
 NODE_ENV=production
+NODE_VERSION=22
 ```
 
 ## Demo Logins
