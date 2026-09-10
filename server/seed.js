@@ -258,20 +258,26 @@ export async function seedDatabase(db, hashPassword) {
   await db.createUser({
     id: 'user-patient-1',
     role: 'patient',
+    roles: ['patient'],
+    primaryRole: 'patient',
     name: 'Ramesh Kumar',
     email: 'ramesh.kumar@example.com',
     phone: '9876543210',
     password_hash: patientPassword,
+    emailVerified: true,
     data: patientProfile,
   });
 
   await db.createUser({
     id: 'user-doctor-1',
     role: 'doctor',
+    roles: ['doctor'],
+    primaryRole: 'doctor',
     name: 'Dr. Ravi Teja',
     email: 'dr.raviteja@ayudhvikas.org',
     phone: '9000012345',
     password_hash: doctorPassword,
+    emailVerified: true,
     data: {
       doctorId: 'doc-1',
       hospitalId: 'hosp-3',
@@ -284,10 +290,13 @@ export async function seedDatabase(db, hashPassword) {
   await db.createUser({
     id: 'user-hospital-1',
     role: 'hospital',
+    roles: ['hospital'],
+    primaryRole: 'hospital',
     name: 'KIMS Hospitals Admin',
     email: 'kims@ayudhvikas.org',
     phone: '9876500001',
     password_hash: hospitalPassword,
+    emailVerified: true,
     data: {
       hospitalId: 'hosp-1',
       identifier: 'kims@ayudhvikas.org',
@@ -297,26 +306,34 @@ export async function seedDatabase(db, hashPassword) {
   await db.createUser({
     id: 'user-marketing-1',
     role: 'marketing',
+    roles: ['marketing'],
+    primaryRole: 'marketing',
     name: 'Rohit Kumar',
     email: 'marketing@ayudhvikasfoundation.org',
     phone: '9876500000',
     password_hash: marketingPassword,
+    emailVerified: true,
     data: { identifier: 'marketing@ayudhvikasfoundation.org' },
   });
 
   await db.createUser({
     id: 'user-admin-1',
     role: 'admin',
+    roles: ['admin'],
+    primaryRole: 'admin',
     name: 'Super Administrator',
     email: 'admin@ayudhvikasfoundation.org',
     phone: '9999999999',
     password_hash: adminPassword,
+    emailVerified: true,
     data: { identifier: 'admin@ayudhvikasfoundation.org' },
   });
 
   await db.createUser({
     id: 'user-volunteer-1',
     role: 'volunteer',
+    roles: ['volunteer'],
+    primaryRole: 'volunteer',
     name: 'Priya Volunteer',
     email: 'volunteer@ayudhvikas.org',
     phone: '9876500091',
@@ -331,6 +348,8 @@ export async function seedDatabase(db, hashPassword) {
   await db.createUser({
     id: 'user-organizer-1',
     role: 'social_organizer',
+    roles: ['social_organizer'],
+    primaryRole: 'social_organizer',
     name: 'Rama Social Organizer',
     email: 'organizer@ayudhvikas.org',
     phone: '9876500092',
@@ -344,11 +363,11 @@ export async function seedDatabase(db, hashPassword) {
   });
 
   for (const hospital of HOSPITALS) {
-    await db.create('hospitals', hospital);
+    await db.create('hospitals', { ...hospital, verificationStatus: 'VERIFIED', status: hospital.status || 'Active' });
   }
 
   for (const doctor of flattenDoctors()) {
-    await db.create('doctors', doctor);
+    await db.create('doctors', { ...doctor, verificationStatus: 'VERIFIED' });
   }
 
   for (const camp of HEALTH_CAMPS) {

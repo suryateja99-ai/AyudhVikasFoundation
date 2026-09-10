@@ -279,7 +279,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     confirmPassword: '',
     consultationFee: '500',
     availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    declaration: false
+    declaration: false,
+    verificationDocuments: [] as { type: string; name: string; url: string; uploadedAt: string }[],
   });
 
   // Hospital Form State
@@ -406,8 +407,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
   const passwordErrors = (password: string, confirmPassword: string) => {
     const errs: Record<string, string> = {};
-    if (!password || password.length < 6) {
-      errs.password = 'Password must be at least 6 characters / పాస్‌వర్డ్ కనీసం 6 అక్షరాలు ఉండాలి';
+    if (!password || password.length < 8) {
+      errs.password = 'Password must be at least 8 characters / పాస్‌వర్డ్ కనీసం 8 అక్షరాలు ఉండాలి';
+    } else if (!/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*]/.test(password)) {
+      errs.password = 'Must include uppercase, number and special character / పెద్ద అక్షరం, సంఖ్య, ప్రత్యేక అక్షరం అవసరం';
     }
     if (!confirmPassword) {
       errs.confirmPassword = 'Please confirm your password / పాస్‌వర్డ్‌ను నిర్ధారించండి';
@@ -656,6 +659,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     const pwdErrs = passwordErrors(data.password || '', data.confirmPassword || '');
     if (Object.keys(pwdErrs).length) {
       setErrors(pwdErrs);
+      return;
+    }
+    if (roleName === 'Doctor' && (!data.verificationDocuments || data.verificationDocuments.length < 2)) {
+      setErrors({ password: 'Please upload medical degree and license documents for verification.' });
       return;
     }
     const role = roleMap[roleName] || 'patient';
@@ -2111,6 +2118,57 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           onChange={e => setDoctorData({ ...doctorData, currentHospital: e.target.value })}
                           placeholder="Hospital Name"
                           className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-800 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={doctorData.email}
+                          onChange={e => setDoctorData({ ...doctorData, email: e.target.value })}
+                          placeholder="doctor@email.com"
+                          className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-800 mb-1">Medical Degree *</label>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const docs = (doctorData.verificationDocuments || []).filter((d) => d.type !== 'degree');
+                              docs.push({ type: 'degree', name: file.name, url: String(reader.result || ''), uploadedAt: new Date().toISOString() });
+                              setDoctorData({ ...doctorData, verificationDocuments: docs });
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          className="w-full text-xs"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block font-bold text-slate-800 mb-1">Medical License *</label>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const docs = (doctorData.verificationDocuments || []).filter((d) => d.type !== 'license');
+                              docs.push({ type: 'license', name: file.name, url: String(reader.result || ''), uploadedAt: new Date().toISOString() });
+                              setDoctorData({ ...doctorData, verificationDocuments: docs });
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          className="w-full text-xs"
                         />
                       </div>
                     </div>

@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { AdminHealthCampsPage } from './AdminHealthCampsPage';
 import { AdminRoleManagement } from './AdminRoleManagement';
+import { DoctorVerificationPanel } from './DoctorVerificationPanel';
+import { HospitalVerificationPanel } from './HospitalVerificationPanel';
 import { useLiveData } from '../context/LiveDataContext';
 import { api } from '../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { ADMIN_NAV_PATHS } from '../lib/roleRoutes';
 import {
   LayoutDashboard,
   Users,
@@ -61,15 +65,28 @@ import {
 interface SuperAdminDashboardProps {
   onLogout: () => void;
   onNavigateHome: () => void;
+  initialNav?: string;
 }
 
 export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   onLogout,
-  onNavigateHome
+  onNavigateHome,
+  initialNav = 'Dashboard'
 }) => {
+  const navigate = useNavigate();
   const { collections, create, update, remove, stats } = useLiveData();
   // Navigation & Sub-section states
-  const [activeNav, setActiveNav] = useState('Dashboard');
+  const [activeNav, setActiveNav] = useState(initialNav);
+
+  const goNav = (nav: string) => {
+    setActiveNav(nav);
+    const path = ADMIN_NAV_PATHS[nav];
+    if (path) navigate(path);
+  };
+
+  useEffect(() => {
+    if (initialNav) setActiveNav(initialNav);
+  }, [initialNav]);
   const [expandedSection, setExpandedSection] = useState<{ [key: string]: boolean }>({
     management: true,
     operations: true,
@@ -425,7 +442,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               {expandedSection.management && (
                 <div className="space-y-0.5">
                   <button
-                    onClick={() => { setActiveNav('Users Management'); showToast('Loaded Users Registry'); }}
+                    onClick={() => { goNav('Users Management'); showToast('Loaded Users Registry'); }}
                     className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Users Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -438,7 +455,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
 
                   <button
-                    onClick={() => setActiveNav('Doctors Management')}
+                    onClick={() => goNav('Doctors Management')}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Doctors Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -448,7 +465,27 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
 
                   <button
-                    onClick={() => setActiveNav('Hospitals Management')}
+                    onClick={() => goNav('Doctor Verifications')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                      activeNav === 'Doctor Verifications' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Doctor Verifications</span>
+                  </button>
+
+                  <button
+                    onClick={() => goNav('Hospital Verifications')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                      activeNav === 'Hospital Verifications' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Hospital Verifications</span>
+                  </button>
+
+                  <button
+                    onClick={() => goNav('Hospitals Management')}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       activeNav === 'Hospitals Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
                     }`}
@@ -722,7 +759,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
           </div>
 
-          {isRoleManagementNav ? (
+          {activeNav === 'Doctor Verifications' ? (
+            <DoctorVerificationPanel />
+          ) : activeNav === 'Hospital Verifications' ? (
+            <HospitalVerificationPanel />
+          ) : isRoleManagementNav ? (
             <AdminRoleManagement
               activeNav={activeNav}
               users={adminUsers}

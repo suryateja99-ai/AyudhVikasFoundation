@@ -198,13 +198,15 @@ const getSavedState = <T,>(key: string, defaultValue: T): T => {
 interface DoctorDashboardProps {
   onLogout: () => void;
   onNavigateHome: () => void;
+  initialNav?: 'Dashboard' | 'Appointments' | 'Patients' | 'Consultations' | 'Prescriptions' | 'Reports' | 'Earnings' | 'Profile' | 'Availability' | 'Messages' | 'Notifications' | 'Settings';
 }
 
 export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   onLogout,
-  onNavigateHome
+  onNavigateHome,
+  initialNav
 }) => {
-  const [activeNav, setActiveNav] = useState<'Dashboard' | 'Appointments' | 'Patients' | 'Consultations' | 'Prescriptions' | 'Reports' | 'Earnings' | 'Profile' | 'Availability' | 'Messages' | 'Notifications' | 'Settings'>(() => getSavedState('ayudh_doc_activeNav', 'Dashboard'));
+  const [activeNav, setActiveNav] = useState<'Dashboard' | 'Appointments' | 'Patients' | 'Consultations' | 'Prescriptions' | 'Reports' | 'Earnings' | 'Profile' | 'Availability' | 'Messages' | 'Notifications' | 'Settings'>(() => initialNav || getSavedState('ayudh_doc_activeNav', 'Dashboard'));
   const [appointmentsSubTab, setAppointmentsSubTab] = useState<'confirmed' | 'pending' | 'rejected'>(() => getSavedState('ayudh_doc_appointmentsSubTab', 'confirmed'));
   const [patientsSubTab, setPatientsSubTab] = useState<'directory' | 'verify' | 'all'>(() => getSavedState('ayudh_doc_patientsSubTab', 'directory'));
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -229,6 +231,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   useEffect(() => {
     localStorage.setItem('ayudh_doc_activeNav', JSON.stringify(activeNav));
   }, [activeNav]);
+
+  useEffect(() => {
+    if (initialNav) setActiveNav(initialNav);
+  }, [initialNav]);
 
   useEffect(() => {
     localStorage.setItem('ayudh_doc_appointmentsSubTab', JSON.stringify(appointmentsSubTab));

@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, getToken, setToken } from '../lib/api';
+import { roleHome } from '../lib/roleRoutes';
 
 export type UserRole =
   | 'patient'
@@ -15,6 +17,8 @@ export type UserRole =
 export interface AuthUser {
   id: string;
   role: UserRole;
+  roles?: UserRole[];
+  primaryRole?: UserRole;
   name: string;
   email?: string;
   phone?: string;
@@ -24,12 +28,15 @@ export interface AuthUser {
   hospitalId?: string;
   image?: string;
   isGuest?: boolean;
+  emailVerified?: boolean;
   [key: string]: any;
 }
 
 const GUEST_USER: AuthUser = {
   id: 'guest-user',
   role: 'patient',
+  roles: ['patient'],
+  primaryRole: 'patient',
   name: 'Guest Visitor',
   displayName: 'Guest',
   patientId: 'GUEST',
@@ -40,6 +47,15 @@ const GUEST_USER: AuthUser = {
 };
 
 const GUEST_FLAG = 'ayudh_guest';
+const PRIMARY_ROLE_KEY = 'ayudh_primaryRole';
+
+function normalizeUser(user: AuthUser | null): AuthUser | null {
+  if (!user) return null;
+  const roles = (user.roles && user.roles.length ? user.roles : [user.primaryRole || user.role]) as UserRole[];
+  const stored = typeof window !== 'undefined' ? (localStorage.getItem(PRIMARY_ROLE_KEY) as UserRole | null) : null;
+  const primaryRole = (stored && roles.includes(stored) ? stored : user.primaryRole || user.role || roles[0]) as UserRole;
+  return { ...user, roles, primaryRole, role: primaryRole };
+}
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -52,11 +68,13 @@ interface AuthContextValue {
   register: (payload: any) => Promise<{ user: AuthUser; patientId?: string; referenceNo?: string }>;
   logout: () => void;
   updateProfile: (payload: any) => Promise<AuthUser | null>;
+  switchRole: (role: UserRole) => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setTokenState] = useState<string | null>(() => getToken());
   const [loading, setLoading] = useState<boolean>(!!getToken());
@@ -74,7 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       try {
         const res = await api.me();
-        if (!cancelled) setUser(res.user);
+        if (!cancelled) setUser(normalizeUser(res.user));
       } catch {
         if (!cancelled) {
           setToken(null);
@@ -96,39 +114,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(GUEST_FLAG);
     setToken(res.token);
     setTokenState(res.token);
-    setUser(res.user);
-    return res.user as AuthUser;
-  }, []);
+    const next = normalizeUser(res.user) as AuthUser;
+    setUser(next);
+    navigate(roleHome(next.primaryRole || next.role), { replace: true });
+    return next;
+  }, [navigate]);
 
   const loginAsGuest = useCallback(() => {
     setToken(null);
     setTokenState(null);
     localStorage.setItem(GUEST_FLAG, '1');
     setUser(GUEST_USER);
+    navigate('/patient/dashboard', { replace: true });
     return GUEST_USER;
-  }, []);
+  }, [navigate]);
 
   const register = useCallback(async (payload: any) => {
     const res = await api.register(payload);
     localStorage.removeItem(GUEST_FLAG);
     setToken(res.token);
     setTokenState(res.token);
-    setUser(res.user);
-    return { user: res.user as AuthUser, patientId: res.patientId, referenceNo: res.referenceNo };
-  }, []);
+    const next = normalizeUser(res.user) as AuthUser;
+    setUser(next);
+    navigate(roleHome(next.primaryRole || next.role), { replace: true });
+    return { user: next, patientId: res.patientId, referenceNo: res.referenceNo };
+  }, [navigate]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(GUEST_FLAG);
+    localStorage.removeItem(PRIMARY_ROLE_KEY);
     setToken(null);
     setTokenState(null);
     setUser(null);
-  }, []);
+    navigate('/', { replace: true });
+  }, [navigate]);
 
   const updateProfile = useCallback(async (payload: any) => {
     const res = await api.updateMe(payload);
-    setUser(res.user);
-    return res.user as AuthUser;
+    if (res.token) {
+      setToken(res.token);
+      setTokenState(res.token);
+    }
+    const next = normalizeUser(res.user);
+    setUser(next);
+    return next;
   }, []);
+
+  const switchRole = useCallback(async (newRole: UserRole) => {
+    localStorage.setItem(PRIMARY_ROLE_KEY, newRole);
+    setUser((prev) => (prev ? { ...prev, primaryRole: newRole, role: newRole } : null));
+    try {
+      const res = await api.updateMe({ primaryRole: newRole, role: newRole });
+      if (res.token) {
+        setToken(res.token);
+        setTokenState(res.token);
+      }
+      const next = normalizeUser(res.user);
+      setUser(next);
+      return next;
+    } catch {
+      return user;
+    }
+  }, [user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -142,8 +189,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       logout,
       updateProfile,
+      switchRole,
     }),
-    [user, token, loading, login, loginAsGuest, register, logout, updateProfile]
+    [user, token, loading, login, loginAsGuest, register, logout, updateProfile, switchRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

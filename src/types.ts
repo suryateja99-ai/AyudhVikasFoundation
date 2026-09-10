@@ -107,7 +107,15 @@ export interface HospitalVisitRequest {
   preferredDate: string;
   preferredTimeSlot: string;
   visitType: 'OP Consultation' | 'Specialist Review' | 'Emergency' | 'Health Checkup' | 'Second Opinion';
-  status: 'Pending' | 'Accepted' | 'Scheduled' | 'Completed' | 'Rejected' | 'Cancelled';
+  status: 'Pending' | 'Accepted' | 'Scheduled' | 'CheckedIn' | 'Completed' | 'Rejected' | 'Cancelled';
+  assignedDoctorId?: string;
+  assignedBedId?: string;
+  assignedBedNumber?: string;
+  appointmentDateTime?: string;
+  rejectionReason?: string;
+  responseDeadline?: string;
+  confirmationCode?: string;
+  qrCode?: string;
   requestedAt: string;
   acceptedAt?: string;
   tokenNumber?: string;
@@ -126,6 +134,19 @@ export interface SymptomItem {
   speciality: string;
   description: string;
   urgency: 'Routine' | 'Moderate' | 'Urgent' | 'Emergency';
+}
+
+export interface HospitalBed {
+  id: string;
+  hospitalId: string;
+  wardType: 'General' | 'ICU' | 'HDU' | 'Private' | 'OPD' | string;
+  bedNumber: string;
+  floor?: number;
+  roomNumber?: string;
+  status: 'available' | 'occupied' | 'maintenance' | 'reserved' | string;
+  assignedPatientId?: string;
+  reservedUntil?: string;
+  notes?: string;
 }
 
 export type ActiveModal = 

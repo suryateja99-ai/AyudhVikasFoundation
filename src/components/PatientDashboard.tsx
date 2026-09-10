@@ -58,6 +58,8 @@ import { HospitalSearchVisitSection } from './HospitalSearchVisitSection';
 import { Home } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
+import { LoadingSkeleton } from './LoadingSkeleton';
+import { EmptyState } from './EmptyState';
 
 interface PatientDashboardProps {
   onLogout: () => void;
@@ -85,7 +87,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   onRequireRegister
 }) => {
   const { user, updateProfile, isGuest } = useAuth();
-  const { collections, create } = useLiveData();
+  const { collections, create, loading } = useLiveData();
+  const liveNotifications = (collections.notifications || []).filter((n: any) => n.userId === user?.id && !n.read);
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>(activeTab || initialTab || 'dashboard');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
@@ -456,19 +459,27 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
+                {liveNotifications.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-pulse">
-                  3
+                  {liveNotifications.length}
                 </span>
+                )}
               </button>
 
               {/* Notifications Dropdown */}
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-fadeIn">
                   <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">Notifications (3)</span>
+                    <span className="text-xs font-bold text-slate-800">Notifications ({Math.max(3, liveNotifications.length)})</span>
                     <button onClick={() => setShowNotifications(false)} className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer">Mark all read</button>
                   </div>
                   <div className="divide-y divide-slate-100 text-xs">
+                    {liveNotifications.map((note: any) => (
+                      <div key={note.id} className="px-3 py-2 hover:bg-slate-50 cursor-pointer" onClick={() => setShowNotifications(false)}>
+                        <div className="font-bold text-slate-800">{note.title}</div>
+                        <div className="text-slate-500 text-[10px]">{note.message}</div>
+                      </div>
+                    ))}
                     <div 
                       onClick={() => { setShowNotifications(false); handleSidebarClick('appointments'); }}
                       className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
@@ -585,6 +596,12 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         <main className="flex-1 overflow-y-auto min-w-0 bg-[#f3f5f8]">
           
           {/* TAB 0: FIND NEARBY HOSPITALS & VISIT REQUESTS VIEW */}
+          {loading && activeSidebarTab === 'dashboard' && (
+            <div className="p-6">
+              <LoadingSkeleton count={3} type="card" />
+            </div>
+          )}
+
           {activeSidebarTab === 'find_hospitals' && (
             <div className="p-3 sm:p-5 lg:p-6 animate-fadeIn">
               <HospitalSearchVisitSection 

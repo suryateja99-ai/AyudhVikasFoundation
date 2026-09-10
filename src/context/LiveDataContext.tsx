@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { useAuthOptional } from './AuthContext';
 
 export type CollectionName =
   | 'hospitals'
@@ -25,7 +26,11 @@ export type CollectionName =
   | 'notifications'
   | 'insurance_applications'
   | 'prescriptions'
-  | 'enquiries';
+  | 'enquiries'
+  | 'doctor_hospital_assignments'
+  | 'hospital_beds'
+  | 'doctor_verification_actions'
+  | 'hospital_verification_actions';
 
 type Collections = Record<CollectionName, any[]>;
 
@@ -54,6 +59,10 @@ const EMPTY: Collections = {
   insurance_applications: [],
   prescriptions: [],
   enquiries: [],
+  doctor_hospital_assignments: [],
+  hospital_beds: [],
+  doctor_verification_actions: [],
+  hospital_verification_actions: [],
 };
 
 interface LiveDataValue {
@@ -63,28 +72,33 @@ interface LiveDataValue {
   mongodb: boolean;
   connected: boolean;
   loading: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
   create: (collection: CollectionName, payload: any) => Promise<any>;
   update: (collection: CollectionName, id: string, payload: any) => Promise<any>;
   remove: (collection: CollectionName, id: string) => Promise<void>;
+  applyChange: (collection: string, action: string, record: any) => void;
 }
 
 const LiveDataContext = createContext<LiveDataValue | null>(null);
 
 function upsert(list: any[], record: any, action: string) {
   if (!record?.id) return list;
-  if (action === 'delete') return list.filter((item) => item.id !== record.id);
+  if (action === 'delete' || action === 'deleted') return list.filter((item) => item.id !== record.id);
   const without = list.filter((item) => item.id !== record.id);
   return [record, ...without];
 }
 
 export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const auth = useAuthOptional();
+  const token = auth?.token;
   const [collections, setCollections] = useState<Collections>(EMPTY);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [mode, setMode] = useState('connecting');
   const [mongodb, setMongodb] = useState(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const streamRef = useRef<EventSource | null>(null);
 
   const applyChange = useCallback((collection: string, action: string, record: any) => {
@@ -97,6 +111,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const refresh = useCallback(async () => {
     try {
+      setError(null);
       const boot = await api.bootstrap();
       setMode(boot.mode);
       setMongodb(boot.mongodb);
@@ -106,17 +121,22 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (name === 'hospitals') return [name, boot.hospitals] as const;
           if (name === 'doctors') return [name, boot.doctors] as const;
           if (name === 'health_camps') return [name, boot.health_camps] as const;
-          const res = await api.list(name);
-          return [name, res.items] as const;
+          try {
+            const res = await api.list(name);
+            return [name, res.items || []] as const;
+          } catch {
+            return [name, EMPTY[name]] as const;
+          }
         })
       );
       const next = { ...EMPTY };
       entries.forEach(([name, items]) => {
-        next[name] = items || [];
+        next[name] = [...(items || [])];
       });
       setCollections(next);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load live data', err);
+      setError(err?.message || 'Failed to load live data');
     } finally {
       setLoading(false);
     }
@@ -124,28 +144,44 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, token]);
 
   useEffect(() => {
-    const source = new EventSource('/api/stream');
-    streamRef.current = source;
-    source.onopen = () => setConnected(true);
-    source.onerror = () => setConnected(false);
-    source.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data);
-        if (event.collection === '_hello') {
-          if (event.record?.mode) setMode(event.record.mode);
-          setConnected(true);
-          return;
+    let closed = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      if (closed) return;
+      const source = new EventSource('/api/stream');
+      streamRef.current = source;
+      source.onopen = () => setConnected(true);
+      source.onerror = () => {
+        setConnected(false);
+        source.close();
+        if (!closed) retry = setTimeout(connect, 2500);
+      };
+      source.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data);
+          if (event.collection === '_hello') {
+            if (event.record?.mode) setMode(event.record.mode);
+            setConnected(true);
+            return;
+          }
+          const action = event.action || (event.event === 'record_created' ? 'create' : event.event === 'record_deleted' ? 'delete' : 'update');
+          const record = event.record || event.data || { id: event.id };
+          applyChange(event.collection, action, record);
+        } catch (err) {
+          console.warn('Bad live event', err);
         }
-        applyChange(event.collection, event.action, event.record);
-      } catch (err) {
-        console.warn('Bad live event', err);
-      }
+      };
     };
+
+    connect();
     return () => {
-      source.close();
+      closed = true;
+      if (retry) clearTimeout(retry);
+      streamRef.current?.close();
     };
   }, [applyChange]);
 
@@ -174,12 +210,14 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       mongodb,
       connected,
       loading,
+      error,
       refresh,
       create,
       update,
       remove,
+      applyChange,
     }),
-    [collections, stats, mode, mongodb, connected, loading, refresh, create, update, remove]
+    [collections, stats, mode, mongodb, connected, loading, error, refresh, create, update, remove, applyChange]
   );
 
   return <LiveDataContext.Provider value={value}>{children}</LiveDataContext.Provider>;

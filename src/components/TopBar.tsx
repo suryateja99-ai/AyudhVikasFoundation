@@ -2,6 +2,8 @@ import React from 'react';
 import { Phone, MessageSquare, Mail, User, LogOut, LayoutDashboard } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
+import { NotificationBell } from './NotificationBell';
+import { RoleSwitcher } from './RoleSwitcher';
 
 interface TopBarProps {
   onOpenModal: (modal: ActiveModal) => void;
@@ -74,6 +76,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           </span>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
+              <NotificationBell variant="dark" />
+              <RoleSwitcher />
               <button
                 onClick={onNavigateDashboard}
                 className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors font-bold cursor-pointer"

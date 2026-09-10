@@ -62,7 +62,7 @@ export const api = {
     }),
   me: () => request<{ user: any }>('/api/auth/me'),
   updateMe: (payload: any) =>
-    request<{ user: any }>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+    request<{ user: any; token?: string }>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
   users: () => request<{ items: any[] }>('/api/users'),
   createUser: (payload: any) =>
     request<{ item: any }>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
@@ -93,4 +93,46 @@ export const api = {
   remove: (collection: string, id: string) =>
     request<{ ok: boolean }>(`/api/records/${collection}/${id}`, { method: 'DELETE' }),
   lookupPatient: (q: string) => request<{ item: any }>(`/api/patients/lookup?q=${encodeURIComponent(q)}`),
+  verifyEmail: (token: string) =>
+    request<{ ok: boolean; message?: string }>('/api/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+  notifications: () => request<{ items: any[] }>('/api/notifications'),
+  markNotificationRead: (id: string) =>
+    request<{ item: any }>(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  deleteNotification: (id: string) =>
+    request<{ ok: boolean }>(`/api/notifications/${id}`, { method: 'DELETE' }),
+  pendingDoctorVerifications: () => request<{ items: any[] }>('/api/admin/verifications/doctors'),
+  pendingHospitalVerifications: () => request<{ items: any[] }>('/api/admin/verifications/hospitals'),
+  approveDoctor: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/doctors/${id}/approve`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  rejectDoctor: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/doctors/${id}/reject`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  approveHospital: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/hospitals/${id}/approve`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  rejectHospital: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/hospitals/${id}/reject`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  acceptVisitRequest: (id: string, payload: any = {}) =>
+    request<{ item: any; appointment?: any }>(`/api/visit-requests/${id}/accept`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  rejectVisitRequest: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/visit-requests/${id}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  checkInAppointment: (id: string) =>
+    request<{ item: any }>(`/api/records/appointments/${id}/check-in`, { method: 'PATCH' }),
+  dischargeAppointment: (id: string) =>
+    request<{ item: any }>(`/api/records/appointments/${id}/discharge`, { method: 'PATCH' }),
+  bedStatus: (hospitalId: string) =>
+    request<{ occupancy: any; items: any[] }>(`/api/hospitals/${hospitalId}/beds/status`),
+  createDoctorAssignment: (payload: any) =>
+    request<{ item: any }>('/api/doctor-assignments', { method: 'POST', body: JSON.stringify(payload) }),
+  acceptAssignment: (id: string) =>
+    request<{ item: any }>(`/api/doctor-assignments/${id}/accept`, { method: 'PATCH' }),
+  rejectAssignment: (id: string) =>
+    request<{ item: any }>(`/api/doctor-assignments/${id}/reject`, { method: 'PATCH' }),
 };
