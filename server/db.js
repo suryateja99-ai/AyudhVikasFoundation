@@ -239,6 +239,8 @@ export function createDb(onChange) {
       client = new MongoClient(url, {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 10000,
+        tls: true,
+        retryWrites: true,
       });
       await client.connect();
       mongo = client.db(lastDbName);
