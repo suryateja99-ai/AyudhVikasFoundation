@@ -1,3 +1,5 @@
+import { beginApiActivity, endApiActivity } from './apiActivity';
+
 const TOKEN_KEY = 'ayudh_token';
 
 export function getToken(): string | null {
@@ -17,7 +19,23 @@ export function setToken(token: string | null) {
   }
 }
 
+function activityLabel(path: string, method = 'GET') {
+  const verb = method.toUpperCase();
+  if (path.includes('/auth/login')) return 'Signing in';
+  if (path.includes('/auth/register')) return 'Registering';
+  if (path.includes('/accept')) return 'Accepting request';
+  if (path.includes('/reject')) return 'Updating request';
+  if (path.includes('/approve')) return 'Approving';
+  if (verb === 'POST') return 'Saving';
+  if (verb === 'PATCH') return 'Updating';
+  if (verb === 'DELETE') return 'Removing';
+  if (path.includes('/bootstrap') || path.includes('/records/')) return 'Loading data';
+  return 'Loading';
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = String(options.method || 'GET').toUpperCase();
+  beginApiActivity(activityLabel(path, method));
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
@@ -25,18 +43,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path, { ...options, headers });
-  const text = await res.text();
-  let data: any = {};
   try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { error: text || 'Unexpected response' };
+    const res = await fetch(path, { ...options, headers });
+    const text = await res.text();
+    let data: any = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { error: text || 'Unexpected response' };
+    }
+    if (!res.ok) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data as T;
+  } finally {
+    endApiActivity();
   }
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
-  }
-  return data as T;
 }
 
 export const api = {
@@ -93,6 +115,22 @@ export const api = {
   remove: (collection: string, id: string) =>
     request<{ ok: boolean }>(`/api/records/${collection}/${id}`, { method: 'DELETE' }),
   lookupPatient: (q: string) => request<{ item: any }>(`/api/patients/lookup?q=${encodeURIComponent(q)}`),
+  searchHospitals: (filter: Record<string, string | number | undefined> = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filter).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+    });
+    const q = params.toString();
+    return request<{ items: any[]; total: number }>(`/api/search/hospitals${q ? `?${q}` : ''}`);
+  },
+  searchDoctors: (filter: Record<string, string | number | undefined> = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filter).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+    });
+    const q = params.toString();
+    return request<{ items: any[]; total: number }>(`/api/search/doctors${q ? `?${q}` : ''}`);
+  },
   verifyEmail: (token: string) =>
     request<{ ok: boolean; message?: string }>('/api/auth/verify-email', {
       method: 'POST',

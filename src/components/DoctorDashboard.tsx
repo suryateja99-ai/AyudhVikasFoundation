@@ -51,6 +51,11 @@ import {
 } from 'lucide-react';
 import { DoctorAppointmentsPage, DoctorAppointmentItem } from './DoctorAppointmentsPage';
 import { PatientVerificationSection, VerifiedAyudhPatient } from './PatientVerificationSection';
+import { useAuth } from '../context/AuthContext';
+import { useLiveData } from '../context/LiveDataContext';
+import { LiveStatusBadge } from './LiveStatusBadge';
+import { BrandLogo } from './BrandLogo';
+import { NotificationBell } from './NotificationBell';
 
 export interface DoctorPatientRecord {
   id: string;
@@ -219,6 +224,13 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
   const [walkInToast, setWalkInToast] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { collections, loading: liveLoading } = useLiveData();
+  const liveAppointments = (collections.appointments || []).filter((item: any) =>
+    !user?.doctorId || item.doctorId === user.doctorId || String(item.doctorName || '').toLowerCase().includes(String(user?.name || '').toLowerCase())
+  );
+  const livePatients = (collections.patients || []);
+  const unreadLive = (collections.notifications || []).filter((n: any) => n.userId === user?.id && !n.read);
 
   // Registered Patients List for Dr. Ravi Teja (persisted in localStorage)
   const [registeredPatients, setRegisteredPatients] = useState<DoctorPatientRecord[]>(() =>
@@ -539,9 +551,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               className="flex items-center gap-2.5 cursor-pointer shrink-0" 
               onClick={onNavigateHome}
             >
-              <div className="w-9 h-9 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1 text-emerald-600 shadow-2xs">
-                <HeartPulse className="w-5 h-5" />
-              </div>
+              <BrandLogo className="w-9 h-9 shadow-2xs" />
               <div className="flex flex-col">
                 <h1 className="text-xs sm:text-sm font-black text-[#0f2e5a] tracking-tight leading-none uppercase font-sans">
                   AYUDH VIKAS
@@ -570,8 +580,9 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 <span>Welcome, {doctorInfo.name}</span>
                 <span className="text-base">👋</span>
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-slate-500 font-medium flex items-center gap-2">
                 Here's what's happening with your practice today.
+                <LiveStatusBadge />
               </p>
             </div>
 
@@ -609,9 +620,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-300 flex items-center justify-center text-slate-600 hover:text-slate-900 bg-white cursor-pointer relative"
               >
                 <Bell className="w-4 h-4" />
+                {unreadLive.length > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
-                  5
+                  {unreadLive.length}
                 </span>
+                )}
               </button>
             </div>
 
@@ -1058,7 +1071,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        18
+                        {liveAppointments.length || todaysAppointments.length}
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         Today's Appointments
@@ -1082,7 +1095,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        256
+                        {livePatients.length || 256}
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         Total Patients
@@ -1192,7 +1205,20 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                   {/* 5 Appointments Rows */}
                   <div className="space-y-2 divide-y divide-slate-100">
-                    {todaysAppointments.map((item) => (
+                    {(liveAppointments.length
+                      ? liveAppointments.map((item: any) => ({
+                          id: item.id,
+                          time: String(item.appointmentTime || item.appointmentDateTime || '10:00').slice(0, 5),
+                          period: item.timeSlotPeriod || 'OPD',
+                          patientName: item.patientName || 'Patient',
+                          age: item.age || '--',
+                          gender: item.gender || '',
+                          avatar: item.avatar || '/src/assets/images/patient_avatar_1787229395408.jpg',
+                          type: item.visitType || item.status,
+                          token: item.tokenNumber,
+                        }))
+                      : todaysAppointments
+                    ).map((item) => (
                       <div 
                         key={item.id}
                         onClick={() => setSelectedPatientModal(item)}

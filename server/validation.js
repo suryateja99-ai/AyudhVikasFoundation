@@ -47,7 +47,7 @@ export const schemas = {
     mobile: mobile10,
     phone: mobile10,
     password: strongPassword,
-    speciality: z.string().min(2, 'Speciality required').optional(),
+    speciality: z.string().min(2, 'Speciality required'),
     qualification: z.string().optional(),
     qualifications: z.string().optional(),
     experienceYears: z.coerce.number().min(0).max(70).optional(),
@@ -65,6 +65,8 @@ export const schemas = {
     phone: mobile10,
     password: strongPassword,
     district: z.string().optional(),
+    specialities: z.array(z.string()).optional(),
+    primarySpeciality: z.string().optional(),
     role: z.string().optional(),
   }).passthrough(),
 

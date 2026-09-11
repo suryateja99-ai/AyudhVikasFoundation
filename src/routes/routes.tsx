@@ -461,6 +461,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/patient/dashboard" element={<PatientArea {...patientAreaProps} />} />
           <Route path="/patient/appointments" element={<PatientArea {...patientAreaProps} />} />
           <Route path="/patient/appointments/:id" element={<PatientArea {...patientAreaProps} />} />
+          <Route path="/patient/my-appointment" element={<PatientArea {...patientAreaProps} />} />
           <Route path="/patient/requests" element={<PatientArea {...patientAreaProps} />} />
           <Route path="/patient/prescriptions" element={<PatientArea {...patientAreaProps} />} />
           <Route path="/patient/health-records" element={<PatientArea {...patientAreaProps} />} />

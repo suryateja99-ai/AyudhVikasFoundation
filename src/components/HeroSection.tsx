@@ -43,7 +43,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
 
       <div className="relative w-full px-4 sm:px-8 lg:px-14 py-10 lg:py-14 min-h-[500px] flex items-center">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center w-full">
-          <div className="lg:col-span-7 xl:col-span-6 space-y-5 max-w-3xl">
+          <div className="lg:col-span-7 xl:col-span-7 space-y-5">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-md text-xs font-black uppercase tracking-wide border border-emerald-400 shadow-xs">
               <Heart className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
               <span>Care Beyond Boundaries - Telangana Healthcare Network</span>
@@ -59,30 +59,30 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
               24/7 GPS-enabled emergency ambulances, diagnostic lab checkups, and free rural health camps across Telangana.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5 pt-2 max-w-5xl">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 w-full">
               <button
                 onClick={() => onOpenModal('register_patient')}
-                className="bg-[#008a00] hover:bg-[#007000] text-white p-3 rounded-lg flex items-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-emerald-800 text-left group cursor-pointer min-h-[58px]"
+                className="bg-[#008a00] hover:bg-[#007000] text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-emerald-800 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
               >
-                <div className="w-10 h-10 rounded-md bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-9 h-9 rounded-md bg-white/20 flex items-center justify-center shrink-0">
                   <UserPlus className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-white">Register as Patient</div>
-                  <div className="text-[11px] font-medium text-emerald-100">Create Your Profile</div>
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">Register as Patient</div>
+                  <div className="text-[10px] font-medium text-emerald-100 leading-tight mt-0.5">Create Your Profile</div>
                 </div>
               </button>
 
               <button
                 onClick={() => onOpenModal('book_appointment')}
-                className="bg-[#0052cc] hover:bg-[#003d99] text-white p-3 rounded-lg flex items-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-blue-900 text-left group cursor-pointer min-h-[58px]"
+                className="bg-[#0052cc] hover:bg-[#003d99] text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-blue-900 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
               >
-                <div className="w-10 h-10 rounded-md bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-9 h-9 rounded-md bg-white/20 flex items-center justify-center shrink-0">
                   <Calendar className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-white">Book Appointment</div>
-                  <div className="text-[11px] font-medium text-blue-100">Consult a Doctor</div>
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">Book Appointment</div>
+                  <div className="text-[10px] font-medium text-blue-100 leading-tight mt-0.5">Consult a Doctor</div>
                 </div>
               </button>
 
@@ -94,27 +94,27 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
                     onOpenModal('become_member');
                   }
                 }}
-                className="bg-[#d97706] hover:bg-[#b45309] text-white p-3 rounded-lg flex items-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-amber-800 text-left group cursor-pointer min-h-[58px]"
+                className="bg-[#d97706] hover:bg-[#b45309] text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-amber-800 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
               >
-                <div className="w-10 h-10 rounded-md bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-9 h-9 rounded-md bg-white/20 flex items-center justify-center shrink-0">
                   <Crown className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-white">Become a Member</div>
-                  <div className="text-[11px] font-medium text-amber-100">Enjoy Exclusive Benefits</div>
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">Become a Member</div>
+                  <div className="text-[10px] font-medium text-amber-100 leading-tight mt-0.5">Enjoy Exclusive Benefits</div>
                 </div>
               </button>
 
               <button
                 onClick={() => onOpenModal('emergency_help')}
-                className="bg-[#dc2626] hover:bg-[#b91c1c] text-white p-3 rounded-lg flex items-center gap-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-red-900 text-left group cursor-pointer min-h-[58px]"
+                className="bg-[#dc2626] hover:bg-[#b91c1c] text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-red-900 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
               >
-                <div className="w-10 h-10 rounded-md bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <div className="w-9 h-9 rounded-md bg-white/20 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5 text-white" />
                 </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wide text-white">Emergency Help</div>
-                  <div className="text-[11px] font-medium text-red-100">Get Immediate Support</div>
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">Emergency Help</div>
+                  <div className="text-[10px] font-medium text-red-100 leading-tight mt-0.5">Get Immediate Support</div>
                 </div>
               </button>
             </div>
@@ -139,7 +139,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
             </div>
           </div>
 
-          <div className="lg:col-span-5 xl:col-span-6 relative flex flex-col justify-center min-h-[320px] lg:min-h-[420px]">
+          <div className="lg:col-span-5 xl:col-span-5 relative flex flex-col justify-center min-h-[320px] lg:min-h-[420px]">
             <div className="relative lg:hidden rounded-lg overflow-hidden shadow-xl border-4 border-white bg-slate-900">
               <img
                 src="/src/assets/images/indian_family_hero_1785560495834.jpg"

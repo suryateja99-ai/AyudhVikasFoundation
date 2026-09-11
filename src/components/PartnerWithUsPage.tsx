@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
+import { BrandLogo } from './BrandLogo';
 
 interface PartnerWithUsPageProps {
   onBackToHome: () => void;
@@ -99,9 +100,7 @@ export const PartnerWithUsPage: React.FC<PartnerWithUsPageProps> = ({
           {/* Brand Logo & Healthcare Network subtitle */}
           <div className="flex items-center gap-4 cursor-pointer" onClick={onBackToHome}>
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1.5 text-emerald-600 shadow-2xs">
-                <HeartPulse className="w-7 h-7" />
-              </div>
+              <BrandLogo className="w-11 h-11 shadow-2xs" />
               <div className="flex flex-col">
                 <h1 className="text-lg sm:text-xl font-black text-[#0f2e5a] tracking-tight leading-none uppercase font-sans">
                   AYUDH VIKAS
@@ -464,9 +463,7 @@ export const PartnerWithUsPage: React.FC<PartnerWithUsPageProps> = ({
 
             {/* Step 4 */}
             <div className="flex flex-col items-center">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white border-2 border-[#006633] text-[#006633] flex items-center justify-center shadow-sm">
-                <HeartPulse className="w-7 h-7 sm:w-8 sm:h-8" />
-              </div>
+              <BrandLogo className="w-14 h-14 sm:w-16 sm:h-16 shadow-sm" />
               <span className="text-[10px] sm:text-xs font-black text-slate-800 uppercase mt-2 max-w-[90px] leading-tight">
                 AYUDH VIKAS FOUNDATION
               </span>
@@ -708,9 +705,7 @@ export const PartnerWithUsPage: React.FC<PartnerWithUsPageProps> = ({
             <div className="lg:col-span-7 space-y-6">
               
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center p-1.5 shadow-sm">
-                  <HeartPulse className="w-6 h-6" />
-                </div>
+                <BrandLogo className="w-10 h-10 shadow-sm" />
                 <div>
                   <h3 className="text-base font-black text-white uppercase tracking-tight leading-none">
                     AYUDH VIKAS FOUNDATION

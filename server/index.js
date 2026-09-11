@@ -27,6 +27,7 @@ import {
 } from './email.js';
 import { createNotification, notifyAppointmentConfirmed, notifyUsersByHospital, qrCodeUrl } from './notifications.js';
 import { migrateToNewSchema } from './migrations.js';
+import { searchHospitals, searchDoctors } from './search.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -206,8 +207,21 @@ app.post('/api/auth/register', async (req, res) => {
 
     if (role === 'doctor') {
       const docs = body.verificationDocuments;
+      if (!Array.isArray(docs) || docs.length < 3) {
+        return res.status(400).json({ error: 'Upload medical degree, council registration, and license certificates' });
+      }
+      if (!body.speciality) {
+        return res.status(400).json({ error: 'Doctor speciality is required so patients can find you in search' });
+      }
+    }
+    if (role === 'hospital') {
+      const docs = body.verificationDocuments;
       if (!Array.isArray(docs) || docs.length < 2) {
-        return res.status(400).json({ error: 'Medical degree and license documents required for verification' });
+        return res.status(400).json({ error: 'Upload hospital registration and clinical establishment certificates' });
+      }
+      const specs = body.specialities || body.keySpecialities || [];
+      if (!specs.length && !body.speciality && !body.primarySpeciality) {
+        return res.status(400).json({ error: 'Select at least one hospital speciality so patients can find you in search' });
       }
     }
 
@@ -256,13 +270,20 @@ app.post('/api/auth/register', async (req, res) => {
         status: email ? 'PENDING_VERIFICATION' : 'APPROVED',
       });
     } else if (role === 'doctor') {
+      const doctorSpecialities = Array.from(
+        new Set([body.speciality, ...(body.specialities || body.additionalSpecialities || [])].filter(Boolean))
+      );
       await db.create('doctors', {
         id: doctorId,
         userId: user.id,
         name: name.startsWith('Dr') ? name : `Dr. ${name}`,
-        speciality: body.speciality || 'General Medicine',
+        speciality: body.speciality || doctorSpecialities[0] || 'General Medicine',
+        specialities: doctorSpecialities,
+        subSpeciality: body.subSpeciality || '',
         qualifications: body.qualification || body.qualifications || 'MBBS',
         qualification: body.qualification || 'MBBS',
+        registrationNo: body.registrationNo || '',
+        stateMedicalCouncil: body.stateMedicalCouncil || '',
         hospital: body.currentHospital || body.hospital || 'Ayudh Network',
         hospitalId: body.hospitalId || undefined,
         district: body.district || 'Warangal',
@@ -287,16 +308,24 @@ app.post('/api/auth/register', async (req, res) => {
         });
       }
     } else if (role === 'hospital') {
+      const hospitalSpecialities = Array.from(
+        new Set(
+          (body.specialities || body.keySpecialities || [body.primarySpeciality || body.speciality || 'General Medicine']).filter(Boolean)
+        )
+      );
       await db.create('hospitals', {
         id: hospitalId,
         userId: user.id,
         name: body.hospitalName || name,
         shortName: body.hospitalName || name,
         district: body.district || 'Warangal',
-        location: body.location || body.city || '',
+        location: body.location || body.city || body.fullAddress || '',
+        address: body.fullAddress || '',
         phone,
         email,
-        specialities: body.specialities || ['General Medicine'],
+        speciality: hospitalSpecialities[0],
+        primarySpeciality: hospitalSpecialities[0],
+        specialities: hospitalSpecialities,
         logoText: (body.hospitalName || name).slice(0, 6).toUpperCase(),
         logoBg: 'bg-blue-700',
         hasAyudhCashless: true,
@@ -308,6 +337,10 @@ app.post('/api/auth/register', async (req, res) => {
         status: 'Active',
         verificationStatus: 'PENDING_VERIFICATION',
         verificationDocuments: body.verificationDocuments || [],
+        nabhAccredited: body.nabhAccredited,
+        category: body.category,
+        subscriptionPlan: body.subscriptionPlan || 'Growth',
+        subscriptionAmount: Number(body.subscriptionAmount || 5999),
       });
     } else {
       await db.create('partnerships', {
@@ -390,6 +423,26 @@ app.patch('/api/auth/me', authRequired, async (req, res) => {
     }
   }
   res.json({ user, token: signToken(user) });
+});
+
+app.get('/api/search/hospitals', async (req, res) => {
+  try {
+    const result = await searchHospitals(db, req.query);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Hospital search failed.' });
+  }
+});
+
+app.get('/api/search/doctors', async (req, res) => {
+  try {
+    const result = await searchDoctors(db, req.query);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Doctor search failed.' });
+  }
 });
 
 app.get('/api/bootstrap', async (req, res) => {
@@ -758,6 +811,20 @@ async function acceptVisitRequest(req, res) {
     });
   }
 
+  const assignedDoctorId = doctorId || visitRequest.doctorId;
+  if (assignedDoctorId) {
+    const doctorUser = (await db.listUsers({})).find((u) => u.doctorId === assignedDoctorId);
+    if (doctorUser?.id) {
+      await createNotification(db, doctorUser.id, {
+        type: 'appointment_assigned',
+        title: 'New hospital visit assigned',
+        message: `${visitRequest.patientName} scheduled at ${visitRequest.hospitalName} for ${updated.appointmentDateTime}`,
+        data: { appointmentId: appointment.id, visitRequestId: req.params.id },
+      }, broadcast);
+    }
+  }
+
+  broadcast({ event: 'record_created', collection: 'appointments', action: 'create', id: appointment.id, data: appointment, record: appointment });
   broadcast({ event: 'record_updated', collection: 'visit_requests', action: 'update', id: req.params.id, data: updated, record: updated });
   res.json({ item: updated, appointment, message: 'Request accepted. Confirmation sent to patient.' });
 }
@@ -932,6 +999,7 @@ app.post('/api/records/:collection', async (req, res) => {
       doctor_hospital_assignments: 'DHA',
       doctor_verification_actions: 'DVA',
       hospital_verification_actions: 'HVA',
+      subscription_plans: 'PLAN',
     };
     payload.id = makeId(prefixes[collection] || 'REC');
   }

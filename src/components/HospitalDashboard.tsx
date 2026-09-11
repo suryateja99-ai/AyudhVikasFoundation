@@ -38,6 +38,9 @@ import { api } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { HOSPITAL_NAV_PATHS } from '../lib/roleRoutes';
 import { EmptyState } from './EmptyState';
+import { LiveStatusBadge } from './LiveStatusBadge';
+import { BrandLogo } from './BrandLogo';
+import { NotificationBell } from './NotificationBell';
 
 type HospitalNav =
   | 'Dashboard'
@@ -698,7 +701,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
       <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
         <h2 className="text-base font-black text-slate-950">Enabled Features</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {['Ayudh Cashless Desk', 'Visit Requests', 'Doctor CRUD', 'Priority Listing', 'Analytics', 'Emergency Support'].map((feature) => (
+          {['Ayudh Cashless Desk', 'Visit Requests', 'Doctor Management', 'Priority Listing', 'Analytics', 'Emergency Support'].map((feature) => (
             <div key={feature} className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">
               <CheckCircle2 className="w-4 h-4" />
               {feature}
@@ -858,6 +861,18 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
             <button onClick={() => navigate('Notifications')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
           </div>
           <div className="space-y-3">
+            {(collections.notifications || []).slice(0, 3).map((item: any) => (
+              <div key={item.id} className="grid grid-cols-[34px_1fr_auto] gap-3 text-xs items-start">
+                <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </span>
+                <div>
+                  <div className="font-black text-slate-950">{item.title}</div>
+                  <div className="text-[10px] text-slate-500 font-semibold">{item.message}</div>
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold">Live</span>
+              </div>
+            ))}
             {notifications.map((item) => {
               const Icon = item.icon;
               return (
@@ -921,9 +936,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
         <div className="w-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <button className="flex items-center gap-2.5 shrink-0 cursor-pointer" onClick={onNavigateHome}>
-              <div className="w-9 h-9 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center text-emerald-600">
-                <HeartPulse className="w-5 h-5" />
-              </div>
+              <BrandLogo className="w-9 h-9" />
               <div className="hidden sm:flex flex-col text-left">
                 <h1 className="text-sm font-black text-[#0f2e5a] tracking-tight leading-none uppercase">AYUDH VIKAS</h1>
                 <span className="text-[9px] font-extrabold text-[#006633] tracking-wider uppercase">HEALTH CARE NETWORK</span>
@@ -937,7 +950,10 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
 
             <div className="hidden md:flex flex-col min-w-0">
               <h2 className="text-sm font-black text-slate-900 truncate">Welcome, {user?.displayName || user?.name || 'Hospital Admin'}</h2>
-              <p className="text-[11px] text-slate-500 font-medium truncate">Here is what is happening with {currentHospital.shortName} today.</p>
+              <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-2">
+                Here is what is happening with {currentHospital.shortName} today.
+                <LiveStatusBadge />
+              </p>
             </div>
           </div>
 
@@ -950,9 +966,9 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
               <Headphones className="w-3.5 h-3.5 text-emerald-600" />
               <span className="hidden sm:inline">Hospital Support</span>
             </button>
+            <NotificationBell variant="light" />
             <button onClick={() => navigate('Notifications')} className="relative w-8 h-8 rounded-full border border-slate-200 hover:border-slate-300 flex items-center justify-center text-slate-600 bg-white cursor-pointer">
               <Bell className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">5</span>
             </button>
             <div className="relative">
               <button onClick={() => setUserDropdownOpen(!userDropdownOpen)} className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors">

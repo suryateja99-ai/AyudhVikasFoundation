@@ -36,6 +36,7 @@ const COLLECTIONS = [
   'hospital_beds',
   'doctor_verification_actions',
   'hospital_verification_actions',
+  'subscription_plans',
 ];
 
 function emptyStore() {

@@ -27,7 +27,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onLogout,
   onNavigateDashboard
 }) => {
-  const { connected, mongodb, mode } = useLiveData();
+  const { connected } = useLiveData();
   return (
     <>
     <div className="bg-[#05703c] text-white text-[11px] sm:text-xs font-black text-center py-1 px-4">
@@ -63,16 +63,12 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="flex items-center gap-3 sm:gap-4 ml-auto">
           <span
             className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
-              connected
-                ? mongodb
-                  ? 'bg-emerald-500/20 text-emerald-300'
-                  : 'bg-amber-500/20 text-amber-300'
-                : 'bg-slate-700 text-slate-300'
+              connected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'
             }`}
-            title={mongodb ? 'Connected to MongoDB' : 'Local store active. Add MONGODB_URI to use MongoDB.'}
+            title={connected ? 'Live updates are on' : 'Connecting'}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${connected ? (mongodb ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-slate-400'}`} />
-            {connected ? (mongodb ? 'Live MongoDB' : `Live - ${mode}`) : 'Connecting'}
+            <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-slate-400'}`} />
+            {connected ? 'Live' : 'Connecting'}
           </span>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  HeartPulse, 
   Phone, 
   User, 
   Lock, 
@@ -32,6 +31,7 @@ import {
 } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 interface LoginPageProps {
   onBackToHome: () => void;
@@ -198,9 +198,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           {/* Logo & Network Title */}
           <div className="flex items-center gap-4 cursor-pointer" onClick={onBackToHome}>
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1.5 text-emerald-600 shadow-xs">
-                <HeartPulse className="w-8 h-8" />
-              </div>
+              <BrandLogo className="w-12 h-12 shadow-xs" />
               <div className="flex flex-col">
                 <h1 className="text-xl sm:text-2xl font-black text-[#0f2e5a] tracking-tight leading-tight uppercase font-sans">
                   AYUDH VIKAS

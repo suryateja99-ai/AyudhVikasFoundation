@@ -30,7 +30,8 @@ export type CollectionName =
   | 'doctor_hospital_assignments'
   | 'hospital_beds'
   | 'doctor_verification_actions'
-  | 'hospital_verification_actions';
+  | 'hospital_verification_actions'
+  | 'subscription_plans';
 
 type Collections = Record<CollectionName, any[]>;
 
@@ -63,6 +64,7 @@ const EMPTY: Collections = {
   hospital_beds: [],
   doctor_verification_actions: [],
   hospital_verification_actions: [],
+  subscription_plans: [],
 };
 
 interface LiveDataValue {
@@ -89,6 +91,33 @@ function upsert(list: any[], record: any, action: string) {
   return [record, ...without];
 }
 
+const PUBLIC_COLLECTIONS = new Set(['hospitals', 'doctors', 'health_camps']);
+
+function recordVisible(collection: string, record: any, user: any) {
+  if (!record) return false;
+  if (PUBLIC_COLLECTIONS.has(collection)) return true;
+  if (!user || user.isGuest) return PUBLIC_COLLECTIONS.has(collection);
+  const roles: string[] = user.roles?.length ? user.roles : [user.primaryRole || user.role];
+  if (roles.includes('admin')) return true;
+  if (collection === 'notifications') return record.userId === user.id;
+  const patientId = user.patientId;
+  const doctorId = user.doctorId;
+  const hospitalId = user.hospitalId;
+  if (roles.includes('patient')) {
+    return !record.patientId || record.patientId === patientId || record.id === patientId;
+  }
+  if (roles.includes('doctor')) {
+    return record.doctorId === doctorId || record.id === doctorId || record.userId === user.id;
+  }
+  if (roles.includes('hospital')) {
+    return record.hospitalId === hospitalId || record.id === hospitalId;
+  }
+  if (roles.includes('marketing')) {
+    return collection === 'leads' || collection === 'callbacks' || collection === 'enquiries';
+  }
+  return true;
+}
+
 export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useAuthOptional();
   const token = auth?.token;
@@ -103,11 +132,13 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const applyChange = useCallback((collection: string, action: string, record: any) => {
     if (!(collection in EMPTY)) return;
+    const user = auth?.user;
+    if (action !== 'delete' && action !== 'deleted' && !recordVisible(collection, record, user)) return;
     setCollections((prev) => ({
       ...prev,
       [collection]: upsert(prev[collection as CollectionName], record, action),
     }));
-  }, []);
+  }, [auth?.user]);
 
   const refresh = useCallback(async () => {
     try {

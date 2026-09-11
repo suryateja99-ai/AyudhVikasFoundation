@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { HeartPulse } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 export const VerifyEmailPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -33,9 +33,7 @@ export const VerifyEmailPage: React.FC = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-100">
       <div className="text-center bg-white border border-slate-200 rounded-2xl p-8 max-w-md shadow-sm">
-        <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center text-emerald-700 mb-4">
-          <HeartPulse className="w-6 h-6" />
-        </div>
+        <BrandLogo className="w-12 h-12 mx-auto mb-4" />
         {status === 'loading' && <p className="font-bold text-slate-700">Verifying your email...</p>}
         {status === 'success' && <p className="text-green-600 font-bold">{message}</p>}
         {status === 'error' && (

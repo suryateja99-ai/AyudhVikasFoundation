@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { BrandLogo } from './BrandLogo';
 
 export const NotFound: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md shadow-sm">
+        <BrandLogo className="w-16 h-16 mx-auto mb-3" />
         <p className="text-5xl font-black text-[#0f2e5a]">404</p>
         <h1 className="text-xl font-black text-slate-900 mt-2">Page not found</h1>
         <p className="text-sm text-slate-500 font-semibold mt-2">The page you requested is not available in the Ayudh Vikas network.</p>

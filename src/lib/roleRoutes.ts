@@ -22,6 +22,7 @@ export const PATIENT_TAB_PATHS: Record<string, string> = {
   profile: '/patient/profile',
   find_hospitals: '/patient/requests',
   appointments: '/patient/appointments',
+  my_appointment: '/patient/my-appointment',
   lab_tests: '/patient/lab-tests',
   ambulance_booking: '/patient/ambulance',
   home_service: '/patient/home-care',

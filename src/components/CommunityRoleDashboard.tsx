@@ -1,5 +1,6 @@
 import React from 'react';
-import { HeartPulse, LogOut, Tent, Users, MapPin, CheckCircle2, Handshake } from 'lucide-react';
+import { LogOut, Tent, Users, MapPin, CheckCircle2, Handshake } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 import { useAuth } from '../context/AuthContext';
 import { UPCOMING_CAMPS } from '../data/mockData';
 
@@ -21,9 +22,7 @@ export const CommunityRoleDashboard: React.FC<CommunityRoleDashboardProps> = ({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={onNavigateHome} className="flex items-center gap-2 cursor-pointer">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center text-emerald-600">
-              <HeartPulse className="w-6 h-6" />
-            </div>
+            <BrandLogo className="w-10 h-10" />
             <div className="text-left">
               <div className="text-sm font-black text-[#0f2e5a] uppercase">Ayudh Vikas</div>
               <div className="text-[10px] font-bold text-emerald-700 uppercase">{title}</div>

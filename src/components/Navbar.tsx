@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { PhoneCall, ChevronDown, Menu, X, HeartPulse, UserCheck, UserPlus } from 'lucide-react';
+import { PhoneCall, ChevronDown, Menu, X, UserCheck, UserPlus } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 import { ActiveModal } from '../types';
 
 interface NavbarProps {
@@ -101,9 +102,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenModal, activeTab, setActiv
           onClick={() => setActiveTab('home')}
           className="flex items-center gap-3 cursor-pointer group min-w-0"
         >
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-2 text-emerald-700 shadow-sm group-hover:bg-emerald-100 transition-all shrink-0">
-            <HeartPulse className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600" />
-          </div>
+          <BrandLogo className="w-11 h-11 sm:w-12 sm:h-12 shadow-sm group-hover:scale-105 transition-transform" />
           <div className="flex flex-col min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
               <h1 className="text-lg sm:text-2xl font-black text-[#0f2e5a] leading-none uppercase font-sans">

@@ -46,6 +46,12 @@ async function findUserForPatient(db, patient) {
   return null;
 }
 
+async function findUserByDoctorId(db, doctorId) {
+  if (!doctorId) return null;
+  const users = await db.listUsers({});
+  return users.find((user) => user.doctorId === doctorId) || null;
+}
+
 export async function notifyAppointmentConfirmed(db, appointmentId, broadcast) {
   const appointment = await db.get('appointments', appointmentId);
   if (!appointment) return;
@@ -82,6 +88,16 @@ export async function notifyAppointmentConfirmed(db, appointmentId, broadcast) {
     await sendSMS(phone, {
       message: `Your appointment with ${doctorName} is confirmed for ${when}. Confirmation ID: ${appointment.id}`,
     });
+  }
+
+  const doctorUser = await findUserByDoctorId(db, appointment.doctorId);
+  if (doctorUser?.id) {
+    await createNotification(db, doctorUser.id, {
+      type: 'appointment_assigned',
+      title: 'New appointment assigned',
+      message: `${appointment.patientName || 'A patient'} is booked with you for ${when}`,
+      data: { appointmentId },
+    }, broadcast);
   }
 }
 

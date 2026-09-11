@@ -5,6 +5,7 @@ import App from './App.tsx';
 import { AuthProvider } from './context/AuthContext';
 import { LiveDataProvider } from './context/LiveDataContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { GlobalApiSpinner } from './components/GlobalApiSpinner';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <LiveDataProvider>
           <ErrorBoundary>
+            <GlobalApiSpinner />
             <App />
           </ErrorBoundary>
         </LiveDataProvider>

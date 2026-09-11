@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 
 import { useLiveData } from '../context/LiveDataContext';
+import { BrandLogo } from './BrandLogo';
 
 interface AdminHealthCampsPageProps {
   onBackToDashboard?: () => void;
@@ -472,9 +473,7 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                   className="flex items-center gap-2 pl-2 border-l border-slate-200 cursor-pointer hover:opacity-90 transition-opacity p-1 rounded-lg hover:bg-slate-50"
                 >
-                  <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shadow-2xs">
-                    <span className="text-emerald-700 text-sm font-black">🌿</span>
-                  </div>
+                  <BrandLogo className="w-7 h-7 shadow-2xs" />
                   <div className="hidden lg:block text-left leading-tight">
                     <div className="text-[11px] font-black text-[#0b3c6d] uppercase tracking-wide">
                       AYUDH VIKAS

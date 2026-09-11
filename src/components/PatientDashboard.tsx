@@ -60,6 +60,9 @@ import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { EmptyState } from './EmptyState';
+import { LiveStatusBadge } from './LiveStatusBadge';
+import { BrandLogo } from './BrandLogo';
+import { PatientMyAppointmentsPage } from './PatientMyAppointmentsPage';
 
 interface PatientDashboardProps {
   onLogout: () => void;
@@ -208,7 +211,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'find_hospitals', label: 'Find Nearby Hospitals', icon: Building2, highlight: true },
-    { id: 'appointments', label: 'My Appointments', icon: Calendar },
+    { id: 'appointments', label: 'Book Doctor', icon: Calendar },
+    { id: 'my_appointment', label: 'My Appointment', icon: CalendarDays },
     { id: 'lab_tests', label: 'Book Lab Tests', icon: TestTube, highlight: true },
     { id: 'ambulance_booking', label: 'Ambulance Booking', icon: Ambulance, highlight: true },
     { id: 'home_service', label: 'Home Service', icon: Home, highlight: true },
@@ -387,9 +391,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               onClick={onNavigateHome}
               title="Return to Home page"
             >
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1.5 text-emerald-600 shadow-2xs">
-                <HeartPulse className="w-6 h-6 sm:w-7 sm:h-7" />
-              </div>
+              <BrandLogo className="w-10 h-10 sm:w-11 sm:h-11 shadow-2xs" />
               <div className="flex flex-col">
                 <h1 className="text-base sm:text-lg font-black text-[#0f2e5a] tracking-tight leading-none uppercase font-sans">
                   AYUDH VIKAS
@@ -481,7 +483,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       </div>
                     ))}
                     <div 
-                      onClick={() => { setShowNotifications(false); handleSidebarClick('appointments'); }}
+                      onClick={() => { setShowNotifications(false); handleSidebarClick('my_appointment'); }}
                       className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
                     >
                       <div className="font-bold text-slate-800">Appointment Confirmed</div>
@@ -666,6 +668,10 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 onLogout={onLogout}
               />
             </div>
+          )}
+
+          {activeSidebarTab === 'my_appointment' && (
+            <PatientMyAppointmentsPage />
           )}
 
           {/* TAB 3B: HOME HEALTHCARE / HOME SERVICE VIEW */}
@@ -1375,8 +1381,9 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <h2 className="text-base sm:text-lg font-black text-[#0f2e5a]">
                     Welcome Back, {profileData.name}!
                   </h2>
-                  <p className="text-xs text-slate-500 font-semibold">
+                  <p className="text-xs text-slate-500 font-semibold flex items-center gap-2">
                     Here is your healthcare network dashboard and patient summary
+                    <LiveStatusBadge />
                   </p>
                 </div>
 
@@ -1419,6 +1426,38 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 </div>
 
               </div>
+
+              {(() => {
+                const pid = user?.patientId || profileData.patientId;
+                const myRequests = (collections.visit_requests || []).filter((r: any) => !pid || r.patientId === pid);
+                const myAppts = (collections.appointments || []).filter((a: any) => !pid || a.patientId === pid);
+                const pending = myRequests.filter((r: any) => String(r.status).toLowerCase() === 'pending').length;
+                const scheduled = myRequests.filter((r: any) => ['accepted', 'scheduled'].includes(String(r.status).toLowerCase())).length;
+                return (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    <button type="button" onClick={() => handleSidebarClick('my_appointment')} className="text-left bg-white border border-slate-200 rounded-xl p-3 cursor-pointer hover:border-emerald-400">
+                      <div className="text-[10px] font-black text-slate-500 uppercase">My visit requests</div>
+                      <div className="text-xl font-black text-slate-900">{myRequests.length}</div>
+                      <div className="text-[10px] font-bold text-amber-700">{pending} pending hospital response</div>
+                    </button>
+                    <button type="button" onClick={() => handleSidebarClick('my_appointment')} className="text-left bg-white border border-slate-200 rounded-xl p-3 cursor-pointer hover:border-emerald-400">
+                      <div className="text-[10px] font-black text-slate-500 uppercase">Scheduled visits</div>
+                      <div className="text-xl font-black text-emerald-700">{scheduled}</div>
+                      <div className="text-[10px] font-bold text-slate-500">Accepted by hospital</div>
+                    </button>
+                    <button type="button" onClick={() => handleSidebarClick('my_appointment')} className="text-left bg-white border border-slate-200 rounded-xl p-3 cursor-pointer hover:border-blue-400">
+                      <div className="text-[10px] font-black text-slate-500 uppercase">Doctor appointments</div>
+                      <div className="text-xl font-black text-blue-700">{myAppts.length}</div>
+                      <div className="text-[10px] font-bold text-slate-500">Live from network</div>
+                    </button>
+                    <div className="bg-white border border-slate-200 rounded-xl p-3">
+                      <div className="text-[10px] font-black text-slate-500 uppercase">Unread alerts</div>
+                      <div className="text-xl font-black text-rose-700">{liveNotifications.length}</div>
+                      <div className="text-[10px] font-bold text-slate-500">Hospital / doctor updates</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 9 QUICK ACTION BUTTONS */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">

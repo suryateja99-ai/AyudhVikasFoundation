@@ -7,6 +7,8 @@ import { useLiveData } from '../context/LiveDataContext';
 import { api } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { ADMIN_NAV_PATHS } from '../lib/roleRoutes';
+import { LiveStatusBadge } from './LiveStatusBadge';
+import { BrandLogo } from './BrandLogo';
 import {
   LayoutDashboard,
   Users,
@@ -168,7 +170,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     const res = await api.createUser(newUser);
     setAdminUsers((prev) => [res.item, ...prev]);
     setNewUser({ name: '', email: '', phone: '', role: 'patient', password: 'Password@123', status: 'Active' });
-    showToast('User created in database');
+    showToast('User created');
   };
 
   const handleSaveAdminUser = async (e: React.FormEvent) => {
@@ -178,13 +180,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     const res = await api.updateUser(id, password ? { ...payload, password } : payload);
     setAdminUsers((prev) => prev.map((item) => (item.id === id ? res.item : item)));
     setEditingUser(null);
-    showToast('User updated in database');
+    showToast('User updated');
   };
 
   const handleDeleteAdminUser = async (id: string) => {
     await api.removeUser(id);
     setAdminUsers((prev) => prev.filter((item) => item.id !== id));
-    showToast('User deleted from database');
+    showToast('User deleted');
   };
 
   const toggleSection = (section: string) => {
@@ -205,7 +207,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     );
   }
 
-  const isRoleManagementNav = ['Users Management', 'Doctors Management', 'Hospitals Management', 'Marketing Team'].includes(activeNav);
+  const isRoleManagementNav = ['Users Management', 'Doctors Management', 'Hospitals Management', 'Marketing Team', 'Feature Management'].includes(activeNav);
 
   return (
     <div className="min-h-screen bg-[#f0f4f9] font-sans text-slate-800 flex flex-col selection:bg-blue-600 selection:text-white">
@@ -223,12 +225,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
               className="flex items-center gap-2.5 cursor-pointer group"
             >
               {/* Ayudh Vikas Tree / Hands Logo */}
-              <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-                <div className="relative flex items-center justify-center">
-                  <span className="text-emerald-700 text-xl font-black">🌿</span>
-                  <div className="absolute -bottom-1 w-2.5 h-1 bg-blue-600 rounded-full"></div>
-                </div>
-              </div>
+              <BrandLogo className="w-10 h-10 shadow-2xs group-hover:scale-105 transition-transform" />
               <div className="leading-tight hidden sm:block">
                 <div className="text-[13px] font-black tracking-wider text-[#0b3c6d] uppercase">
                   AYUDH VIKAS
@@ -482,6 +479,16 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
                     <span>Hospital Verifications</span>
+                  </button>
+
+                  <button
+                    onClick={() => goNav('Feature Management')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                      activeNav === 'Feature Management' ? 'bg-[#1a3863] text-white' : 'text-slate-300 hover:bg-[#16335a] hover:text-white'
+                    }`}
+                  >
+                    <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Feature Management</span>
                   </button>
 
                   <button
@@ -742,7 +749,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 Welcome back, Admin!
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Here's what's happening with Ayudh Vikas Health Care Network today.
+                Here's what's happening with Ayudh Vikas Health Care Network today. <LiveStatusBadge />
               </p>
             </div>
 
@@ -779,7 +786,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 <div>
                   <h3 className="text-sm font-black text-slate-900">Registered Users Registry</h3>
                   <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-                    View every role account and perform database CRUD operations from one admin screen.
+                    View every role account and manage users from one admin screen.
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">

@@ -577,7 +577,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
                   Enter Patient Ayudh Vikas ID / UHID / Registered Mobile:
                 </span>
                 <span className="text-[11px] text-slate-500 font-normal">
-                  Instant real-time database validation
+                  Instant real-time member validation
                 </span>
               </label>
 

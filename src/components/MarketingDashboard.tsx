@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { MarketingLeadsPage } from './MarketingLeadsPage';
 import { useLiveData } from '../context/LiveDataContext';
+import { BrandLogo } from './BrandLogo';
 
 interface MarketingDashboardProps {
   onLogout: () => void;
@@ -160,9 +161,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
               onClick={onNavigateHome}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <div className="w-10 h-10 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1 text-emerald-600 shadow-2xs group-hover:scale-105 transition-transform">
-                <HeartPulse className="w-6 h-6" />
-              </div>
+              <BrandLogo className="w-10 h-10 shadow-2xs group-hover:scale-105 transition-transform" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-black text-[#0f2e5a] tracking-tight leading-none uppercase">

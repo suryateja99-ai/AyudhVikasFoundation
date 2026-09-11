@@ -114,7 +114,7 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
       !doctorId || a.doctorId === doctorId || String(a.doctorName || '').toLowerCase().includes('ravi teja')
     );
     if (!live.length) return;
-    setAppointments((prev) => {
+    setAppointments(() => {
       const mapped = live.map((a: any) => ({
         id: a.id,
         patientName: a.patientName || a.name || 'Patient',
@@ -133,18 +133,14 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
         visitType: a.visitType || 'Consultation',
         reason: a.reason || a.chiefComplaint || 'Consultation',
         symptoms: a.symptoms || [],
-        status: a.status || 'Pending',
+        status: ['Scheduled', 'Accepted', 'Confirmed'].includes(a.status) ? 'Confirmed' : a.status || 'Pending',
         bookedAt: a.bookedAt || a.createdAt || '',
         rejectionReason: a.rejectionReason,
         rejectedAt: a.rejectedAt,
         patientNotes: a.patientNotes,
         previousVisitsCount: a.previousVisitsCount || 0,
       }));
-      const byId = new Map(mapped.map((item: any) => [item.id, item]));
-      prev.forEach((item) => {
-        if (!byId.has(item.id)) byId.set(item.id, item);
-      });
-      return Array.from(byId.values()) as DoctorAppointmentItem[];
+      return mapped as DoctorAppointmentItem[];
     });
   }, [collections.appointments, user]);
 
