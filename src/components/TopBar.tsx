@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, MessageSquare, Mail, UserCheck, Key, UserPlus, User, LogOut, LayoutDashboard } from 'lucide-react';
+import { Phone, MessageSquare, Mail, User, LogOut, LayoutDashboard } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
 
@@ -25,10 +25,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   onLogout,
   onNavigateDashboard
 }) => {
-  const { connected, postgres, mode } = useLiveData();
+  const { connected, mongodb, mode } = useLiveData();
   return (
-    <div className="bg-[#0f172a] text-slate-200 text-xs py-1.5 px-4 sm:px-8 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
+    <>
+    <div className="bg-[#05703c] text-white text-[11px] sm:text-xs font-black text-center py-1 px-4">
+      <span className="text-amber-300">Now:</span> Mega Multi-Speciality Free Health Camp in Warangal & Mulugu this Sunday! Register now for free digital OPD token.
+    </div>
+    <div className="bg-[#0f172a] text-slate-200 text-xs py-1.5 px-4 sm:px-8 lg:px-14 border-b border-slate-800">
+      <div className="w-full flex flex-wrap justify-between items-center gap-2">
         {/* Left Side Contact Info */}
         <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-1.5 hover:text-emerald-400 transition-colors cursor-pointer">
@@ -58,15 +62,15 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span
             className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
               connected
-                ? postgres
+                ? mongodb
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'bg-amber-500/20 text-amber-300'
                 : 'bg-slate-700 text-slate-300'
             }`}
-            title={postgres ? 'Connected to PostgreSQL' : 'Local store active. Add DATABASE_URL to use PostgreSQL.'}
+            title={mongodb ? 'Connected to MongoDB' : 'Local store active. Add MONGODB_URI to use MongoDB.'}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${connected ? (postgres ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-slate-400'}`} />
-            {connected ? (postgres ? 'Live DB' : `Live · ${mode}`) : 'Connecting'}
+            <span className={`w-1.5 h-1.5 rounded-full ${connected ? (mongodb ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-slate-400'}`} />
+            {connected ? (mongodb ? 'Live MongoDB' : `Live - ${mode}`) : 'Connecting'}
           </span>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
@@ -107,46 +111,11 @@ export const TopBar: React.FC<TopBarProps> = ({
               )}
             </div>
           ) : (
-            <>
-              <button 
-                onClick={() => {
-                  if (onSignInClick) {
-                    onSignInClick();
-                  } else {
-                    onOpenModal('patient_portal');
-                  }
-                }} 
-                className="flex items-center gap-1 hover:text-emerald-400 transition-colors font-medium cursor-pointer"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Sign In</span>
-              </button>
-              <span className="text-slate-600">|</span>
-              <button 
-                onClick={() => onOpenModal('register_patient')} 
-                className="flex items-center gap-1 hover:text-emerald-400 transition-colors font-medium cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Register Now</span>
-              </button>
-              <span className="text-slate-600">|</span>
-              <button 
-                onClick={() => {
-                  if (onSignInClick) {
-                    onSignInClick();
-                  } else {
-                    onOpenModal('patient_portal');
-                  }
-                }} 
-                className="flex items-center gap-1 hover:text-sky-400 transition-colors text-slate-400 cursor-pointer"
-              >
-                <Key className="w-3.5 h-3.5" />
-                <span>Forgot Password?</span>
-              </button>
-            </>
+            null
           )}
         </div>
       </div>
     </div>
+    </>
   );
 };

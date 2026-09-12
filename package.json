@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node server/dev.mjs",
     "dev:web": "vite --port=3000 --host=0.0.0.0",
@@ -20,8 +23,8 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
+    "mongodb": "^7.6.0",
     "motion": "^12.23.24",
-    "pg": "^8.16.3",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"

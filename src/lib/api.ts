@@ -40,11 +40,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; mode: string; postgres: boolean; counts: Record<string, number> }>('/api/health'),
+  health: () => request<{ ok: boolean; mode: string; mongodb: boolean; counts: Record<string, number> }>('/api/health'),
   bootstrap: () =>
     request<{
       mode: string;
-      postgres: boolean;
+      mongodb: boolean;
       hospitals: any[];
       doctors: any[];
       health_camps: any[];
@@ -63,6 +63,13 @@ export const api = {
   me: () => request<{ user: any }>('/api/auth/me'),
   updateMe: (payload: any) =>
     request<{ user: any }>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+  users: () => request<{ items: any[] }>('/api/users'),
+  createUser: (payload: any) =>
+    request<{ item: any }>('/api/users', { method: 'POST', body: JSON.stringify(payload) }),
+  updateUser: (id: string, payload: any) =>
+    request<{ item: any }>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  removeUser: (id: string) =>
+    request<{ ok: boolean }>(`/api/users/${id}`, { method: 'DELETE' }),
   list: <T = any>(collection: string, filter: Record<string, string | number | undefined> = {}) => {
     const params = new URLSearchParams();
     Object.entries(filter).forEach(([k, v]) => {

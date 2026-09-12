@@ -367,13 +367,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">Click to fill</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={handleAutoFillPatient}
-                    className="bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-slate-900 group-hover:text-emerald-800 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-slate-900 group-hover:text-emerald-800 flex items-center gap-1 min-w-0">
                       <User className="w-3 h-3 text-emerald-600" />
                       <span>Patient</span>
                     </div>
@@ -385,9 +385,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillDoctor}
-                    className="bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-900 border border-slate-200 hover:border-blue-300 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-900 border border-slate-200 hover:border-blue-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-[#0f2e5a] group-hover:text-blue-900 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-[#0f2e5a] group-hover:text-blue-900 flex items-center gap-1 min-w-0">
                       <Stethoscope className="w-3 h-3 text-blue-600" />
                       <span>Doctor</span>
                     </div>
@@ -399,9 +399,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillHospital}
-                    className="bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-900 border border-slate-200 hover:border-sky-300 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-900 border border-slate-200 hover:border-sky-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-sky-900 group-hover:text-sky-950 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-sky-900 group-hover:text-sky-950 flex items-center gap-1 min-w-0">
                       <Building2 className="w-3 h-3 text-sky-600" />
                       <span>Hospital</span>
                     </div>
@@ -413,9 +413,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillMarketing}
-                    className="bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200 hover:border-emerald-400 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200 hover:border-emerald-400 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-emerald-800 group-hover:text-emerald-900 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-emerald-800 group-hover:text-emerald-900 flex items-center gap-1 min-w-0">
                       <Megaphone className="w-3 h-3 text-emerald-600" />
                       <span>Marketing</span>
                     </div>
@@ -427,9 +427,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillAdmin}
-                    className="bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-950 border border-slate-200 hover:border-purple-400 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-950 border border-slate-200 hover:border-purple-400 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-purple-900 group-hover:text-purple-950 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-purple-900 group-hover:text-purple-950 flex items-center gap-1 min-w-0">
                       <ShieldCheck className="w-3 h-3 text-purple-600" />
                       <span>Admin</span>
                     </div>
@@ -441,9 +441,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillVolunteer}
-                    className="bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-200 hover:border-teal-300 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-200 hover:border-teal-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-teal-900 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-teal-900 flex items-center gap-1 min-w-0">
                       <HeartHandshake className="w-3 h-3 text-teal-600" />
                       <span>Volunteer</span>
                     </div>
@@ -455,9 +455,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   <button
                     type="button"
                     onClick={handleAutoFillOrganizer}
-                    className="bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 rounded-lg p-2 text-left transition-all shadow-2xs cursor-pointer group"
+                    className="bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
                   >
-                    <div className="text-[11px] font-black text-amber-900 flex items-center gap-1">
+                    <div className="text-[11px] font-black text-amber-900 flex items-center gap-1 min-w-0">
                       <Users className="w-3 h-3 text-amber-600" />
                       <span>Organizer</span>
                     </div>

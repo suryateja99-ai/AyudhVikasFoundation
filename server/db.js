@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import pg from 'pg';
+import { MongoClient } from 'mongodb';
 
-const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCAL_FILE = path.join(__dirname, 'local-data.json');
+const DEFAULT_DB_NAME = 'ayudh_vikas_db';
 
 const COLLECTIONS = [
   'hospitals',
@@ -63,15 +63,6 @@ function saveLocal(store) {
   fs.writeFileSync(LOCAL_FILE, JSON.stringify(store, null, 2), 'utf8');
 }
 
-function matchesFilter(record, filter = {}) {
-  return Object.entries(filter).every(([key, value]) => {
-    if (value === undefined || value === null || value === '') return true;
-    const actual = record[key];
-    if (actual === undefined || actual === null) return false;
-    return String(actual).toLowerCase() === String(value).toLowerCase();
-  });
-}
-
 function cleanEnvValue(value) {
   if (value === undefined || value === null) return '';
   let v = String(value).trim();
@@ -85,34 +76,31 @@ function cleanEnvValue(value) {
   return v;
 }
 
-export function buildDatabaseUrl() {
-  const direct =
-    cleanEnvValue(process.env.DATABASE_URL) ||
-    cleanEnvValue(process.env.POSTGRES_URL) ||
-    cleanEnvValue(process.env.POSTGRES_PRISMA_URL) ||
-    cleanEnvValue(process.env.NEON_DATABASE_URL);
-  if (direct) return direct;
-
-  const host = cleanEnvValue(process.env.PGHOST);
-  const user = cleanEnvValue(process.env.PGUSER);
-  const database = cleanEnvValue(process.env.PGDATABASE);
-  if (host && user && database) {
-    const password = encodeURIComponent(cleanEnvValue(process.env.PGPASSWORD));
-    const port = cleanEnvValue(process.env.PGPORT) || '5432';
-    return `postgresql://${encodeURIComponent(user)}:${password}@${host}:${port}/${database}`;
-  }
+function normalizeMongoUri(uri) {
+  const cleaned = cleanEnvValue(uri);
+  if (!cleaned) return '';
+  if (cleaned.startsWith('mongodb://') || cleaned.startsWith('mongodb+srv://')) return cleaned;
   return '';
 }
 
-function sslForUrl(url) {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  if (process.env.DATABASE_SSL === 'false') return false;
-  if (lower.includes('sslmode=disable') || lower.includes('ssl=false')) return false;
-  if (process.env.DATABASE_SSL === 'true') return { rejectUnauthorized: false };
-  if (lower.includes('localhost') || lower.includes('127.0.0.1')) return false;
-  // Hosted Postgres (Neon, Supabase, RDS, Render, Railway) requires SSL.
-  return { rejectUnauthorized: false };
+export function buildMongoUrl() {
+  return (
+    normalizeMongoUri(process.env.MONGODB_URI) ||
+    normalizeMongoUri(process.env.MONGO_URL) ||
+    normalizeMongoUri(process.env.MONGO_URI)
+  );
+}
+
+function databaseNameFromUrl(uri) {
+  const configured = cleanEnvValue(process.env.MONGODB_DB || process.env.MONGO_DB || process.env.DB_NAME);
+  if (configured) return configured;
+  try {
+    const parsed = new URL(uri);
+    const pathname = decodeURIComponent(parsed.pathname || '').replace(/^\/+/, '').trim();
+    return pathname || DEFAULT_DB_NAME;
+  } catch {
+    return DEFAULT_DB_NAME;
+  }
 }
 
 function redactUrl(url) {
@@ -121,44 +109,35 @@ function redactUrl(url) {
     if (parsed.password) parsed.password = '****';
     return parsed.toString();
   } catch {
-    return '(set, but not a valid URL)';
+    return '(set, but not a valid MongoDB URL)';
   }
 }
 
-const SCHEMA_STATEMENTS = [
-  `CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    role TEXT NOT NULL,
-    name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    password_hash TEXT NOT NULL,
-    data JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `CREATE INDEX IF NOT EXISTS users_email_idx ON users ((lower(email)))`,
-  `CREATE INDEX IF NOT EXISTS users_phone_idx ON users (phone)`,
-  `CREATE INDEX IF NOT EXISTS users_role_idx ON users (role)`,
-  `CREATE TABLE IF NOT EXISTS records (
-    id TEXT PRIMARY KEY,
-    collection TEXT NOT NULL,
-    data JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `CREATE INDEX IF NOT EXISTS records_collection_idx ON records (collection)`,
-  `CREATE INDEX IF NOT EXISTS records_data_gin ON records USING GIN (data)`,
-];
+function withoutMongoId(doc) {
+  if (!doc) return null;
+  const { _id, ...rest } = doc;
+  return rest;
+}
+
+function matchesFilter(record, filter = {}) {
+  return Object.entries(filter).every(([key, value]) => {
+    if (value === undefined || value === null || value === '') return true;
+    const actual = record[key];
+    if (actual === undefined || actual === null) return false;
+    return String(actual).toLowerCase() === String(value).toLowerCase();
+  });
+}
 
 export function createDb(onChange) {
   let mode = 'local';
-  let pool = null;
-  let listenClient = null;
+  let client = null;
+  let mongo = null;
   let store = loadLocal();
   let persistTimer = null;
   let lastError = null;
   let lastTarget = '';
+  let lastDbName = '';
+  const watchers = [];
 
   const emit = (event) => {
     if (typeof onChange === 'function') onChange(event);
@@ -176,140 +155,135 @@ export function createDb(onChange) {
     }, 80);
   };
 
-  async function applySchema() {
-    for (const statement of SCHEMA_STATEMENTS) {
-      await pool.query(statement);
+  function collection(name) {
+    if (name === 'users') return mongo.collection('users');
+    return mongo.collection(name);
+  }
+
+  async function ensureIndexes() {
+    await collection('users').createIndex({ id: 1 }, { unique: true });
+    await collection('users').createIndex({ role: 1 });
+    await collection('users').createIndex({ email: 1 }, { sparse: true });
+    await collection('users').createIndex({ phone: 1 }, { sparse: true });
+    await collection('users').createIndex({ 'data.patientId': 1 }, { sparse: true });
+    await collection('users').createIndex({ 'data.identifier': 1 }, { sparse: true });
+    for (const name of COLLECTIONS) {
+      await collection(name).createIndex({ id: 1 }, { unique: true });
+      await collection(name).createIndex({ createdAt: -1 });
     }
   }
 
-  async function importLocalIfPostgresEmpty() {
+  async function importLocalIfMongoEmpty() {
     if (!(await isEmpty())) return false;
     const localHasData =
       store.users.length > 0 ||
       Object.values(store.collections).some((rows) => rows.length > 0);
     if (!localHasData) return false;
 
-    console.log('[db] Empty PostgreSQL database — importing existing local-data.json…');
-    for (const user of store.users) {
-      await pool.query(
-        `INSERT INTO users (id, role, name, email, phone, password_hash, data)
-         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          user.id,
-          user.role,
-          user.name,
-          user.email || null,
-          user.phone || null,
-          user.password_hash,
-          JSON.stringify(user.data || {}),
-        ]
-      );
+    console.log('[db] Empty MongoDB database - importing existing local-data.json...');
+    if (store.users.length) {
+      await collection('users').insertMany(store.users, { ordered: false }).catch((err) => {
+        if (err.code !== 11000) throw err;
+      });
     }
-    for (const [collection, rows] of Object.entries(store.collections)) {
-      for (const row of rows) {
-        await pool.query(
-          `INSERT INTO records (id, collection, data) VALUES ($1,$2,$3::jsonb)
-           ON CONFLICT (id) DO NOTHING`,
-          [row.id, collection, JSON.stringify(row)]
-        );
-      }
+    for (const [name, rows] of Object.entries(store.collections)) {
+      if (!rows.length) continue;
+      await collection(name).insertMany(rows, { ordered: false }).catch((err) => {
+        if (err.code !== 11000) throw err;
+      });
     }
-    console.log('[db] Local data imported into PostgreSQL.');
+    console.log('[db] Local data imported into MongoDB.');
     return true;
   }
 
+  async function startWatchers() {
+    if (process.env.MONGODB_WATCH === 'false') return;
+    const watchNames = ['users', ...COLLECTIONS];
+    for (const name of watchNames) {
+      try {
+        const stream = collection(name).watch([], { fullDocument: 'updateLookup' });
+        stream.on('change', (change) => {
+          const actionMap = { insert: 'create', update: 'update', replace: 'update', delete: 'delete' };
+          const action = actionMap[change.operationType];
+          if (!action) return;
+          if (action === 'delete') {
+            emit({ collection: name, action, record: { id: change.documentKey?._id?.toString?.() } });
+            return;
+          }
+          const record = withoutMongoId(change.fullDocument);
+          if (record) emit({ collection: name, action, record });
+        });
+        stream.on('error', (err) => {
+          console.warn(`[db] MongoDB change stream unavailable for ${name}:`, err.message);
+        });
+        watchers.push(stream);
+      } catch (err) {
+        console.warn(`[db] MongoDB change stream unavailable for ${name}:`, err.message);
+      }
+    }
+  }
+
   async function connect() {
-    const url = buildDatabaseUrl();
+    const url = buildMongoUrl();
     lastError = null;
     lastTarget = url ? redactUrl(url) : '';
+    lastDbName = url ? databaseNameFromUrl(url) : '';
 
     if (!url) {
       mode = 'local';
-      console.log('[db] DATABASE_URL not set — using local JSON store until Postgres credentials are provided.');
+      console.log('[db] MONGODB_URI not set - using local JSON store until MongoDB credentials are provided.');
       return { mode, configured: false };
     }
 
     try {
-      pool = new Pool({
-        connectionString: url,
-        ssl: sslForUrl(url),
-        max: 10,
-        connectionTimeoutMillis: 10000,
-        idleTimeoutMillis: 30000,
+      client = new MongoClient(url, {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 10000,
+        tls: true,
+        retryWrites: true,
       });
-      await pool.query('SELECT 1 AS ok');
-      await applySchema();
-      mode = 'postgres';
-      await importLocalIfPostgresEmpty();
-      console.log(`[db] Connected to PostgreSQL at ${lastTarget}`);
-      await startListen(url);
-      return { mode, configured: true, target: lastTarget };
+      await client.connect();
+      mongo = client.db(lastDbName);
+      await mongo.command({ ping: 1 });
+      await ensureIndexes();
+      mode = 'mongodb';
+      await importLocalIfMongoEmpty();
+      await startWatchers();
+      console.log(`[db] Connected to MongoDB at ${lastTarget} using database ${lastDbName}`);
+      return { mode, configured: true, target: lastTarget, database: lastDbName };
     } catch (err) {
       lastError = err.message;
-      console.error('[db] PostgreSQL connection failed, falling back to local store:', err.message);
-      if (pool) {
-        try { await pool.end(); } catch {}
+      console.error('[db] MongoDB connection failed, falling back to local store:', err.message);
+      if (client) {
+        try { await client.close(); } catch {}
       }
-      pool = null;
+      client = null;
+      mongo = null;
       mode = 'local';
-      return { mode, configured: true, error: err.message, target: lastTarget };
+      return { mode, configured: true, error: err.message, target: lastTarget, database: lastDbName };
     }
   }
 
   function status() {
+    const configuredUrl = buildMongoUrl();
     return {
       mode,
-      postgres: mode === 'postgres',
-      configured: Boolean(buildDatabaseUrl()),
-      target: lastTarget || (buildDatabaseUrl() ? redactUrl(buildDatabaseUrl()) : ''),
+      mongodb: mode === 'mongodb',
+      configured: Boolean(configuredUrl),
+      target: lastTarget || (configuredUrl ? redactUrl(configuredUrl) : ''),
+      database: lastDbName || (configuredUrl ? databaseNameFromUrl(configuredUrl) : ''),
       error: lastError,
     };
   }
 
-  async function startListen(url) {
-    try {
-      listenClient = new pg.Client({
-        connectionString: url,
-        ssl: sslForUrl(url),
-      });
-      await listenClient.connect();
-      await listenClient.query('LISTEN ayudh_changes');
-      listenClient.on('notification', async (msg) => {
-        try {
-          const payload = JSON.parse(msg.payload || '{}');
-          if (payload.collection === 'users') {
-            const user = await getUser(payload.id);
-            emit({ collection: 'users', action: String(payload.action || 'UPDATE').toLowerCase(), record: user });
-            return;
-          }
-          if (payload.action === 'DELETE') {
-            emit({ collection: payload.collection, action: 'delete', record: { id: payload.id } });
-            return;
-          }
-          const record = await get(payload.collection, payload.id);
-          emit({
-            collection: payload.collection,
-            action: String(payload.action || 'UPDATE').toLowerCase() === 'insert' ? 'create' : 'update',
-            record,
-          });
-        } catch (err) {
-          console.warn('[db] notify parse failed:', err.message);
-        }
-      });
-      listenClient.on('error', (err) => {
-        console.warn('[db] LISTEN client error:', err.message);
-      });
-    } catch (err) {
-      console.warn('[db] LISTEN/NOTIFY not available:', err.message);
-    }
-  }
-
   async function isEmpty() {
-    if (mode === 'postgres') {
-      const users = await pool.query('SELECT COUNT(*)::int AS c FROM users');
-      const records = await pool.query('SELECT COUNT(*)::int AS c FROM records');
-      return users.rows[0].c === 0 && records.rows[0].c === 0;
+    if (mode === 'mongodb') {
+      const users = await collection('users').estimatedDocumentCount();
+      if (users > 0) return false;
+      for (const name of COLLECTIONS) {
+        if (await collection(name).estimatedDocumentCount()) return false;
+      }
+      return true;
     }
     const collectionCount = Object.values(store.collections).reduce((n, arr) => n + arr.length, 0);
     return store.users.length === 0 && collectionCount === 0;
@@ -317,7 +291,7 @@ export function createDb(onChange) {
 
   function publicUser(user) {
     if (!user) return null;
-    const { password_hash, passwordHash, ...rest } = user;
+    const { password_hash, passwordHash, _id, ...rest } = user;
     return {
       id: rest.id,
       role: rest.role,
@@ -330,47 +304,45 @@ export function createDb(onChange) {
   }
 
   async function listUsers(filter = {}) {
-    if (mode === 'postgres') {
-      const { rows } = await pool.query('SELECT * FROM users ORDER BY created_at DESC');
-      return rows.map((row) => publicUser({ ...row, ...(row.data || {}) })).filter((u) => matchesFilter(u, filter));
+    if (mode === 'mongodb') {
+      const rows = await collection('users').find({}).sort({ created_at: -1, createdAt: -1 }).toArray();
+      return rows.map((row) => publicUser(row)).filter((user) => matchesFilter(user, filter));
     }
-    return store.users.map(publicUser).filter((u) => matchesFilter(u, filter));
+    return store.users.map(publicUser).filter((user) => matchesFilter(user, filter));
   }
 
   async function findUserByIdentifier(identifier) {
     const raw = String(identifier || '').trim();
     if (!raw) return null;
     const lower = raw.toLowerCase();
-    if (mode === 'postgres') {
-      const { rows } = await pool.query(
-        `SELECT * FROM users
-         WHERE lower(email) = $1
-            OR phone = $2
-            OR id = $2
-            OR data->>'patientId' = $2
-            OR lower(data->>'identifier') = $1
-         LIMIT 1`,
-        [lower, raw]
-      );
-      return rows[0] || null;
+    if (mode === 'mongodb') {
+      return collection('users').findOne({
+        $or: [
+          { email: { $regex: `^${escapeRegex(lower)}$`, $options: 'i' } },
+          { phone: raw },
+          { id: raw },
+          { 'data.patientId': raw },
+          { 'data.identifier': { $regex: `^${escapeRegex(lower)}$`, $options: 'i' } },
+        ],
+      });
     }
     return (
-      store.users.find((u) => {
-        const email = String(u.email || '').toLowerCase();
-        const phone = String(u.phone || '');
-        const patientId = String(u.data?.patientId || '');
-        const ident = String(u.data?.identifier || '').toLowerCase();
-        return email === lower || phone === raw || u.id === raw || patientId === raw || ident === lower;
+      store.users.find((user) => {
+        const email = String(user.email || '').toLowerCase();
+        const phone = String(user.phone || '');
+        const patientId = String(user.data?.patientId || '');
+        const ident = String(user.data?.identifier || '').toLowerCase();
+        return email === lower || phone === raw || user.id === raw || patientId === raw || ident === lower;
       }) || null
     );
   }
 
   async function getUser(id) {
-    if (mode === 'postgres') {
-      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-      return rows[0] ? publicUser(rows[0]) : null;
+    if (mode === 'mongodb') {
+      const found = await collection('users').findOne({ id });
+      return publicUser(found);
     }
-    const found = store.users.find((u) => u.id === id);
+    const found = store.users.find((user) => user.id === id);
     return publicUser(found);
   }
 
@@ -386,15 +358,8 @@ export function createDb(onChange) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (mode === 'postgres') {
-      await pool.query(
-        `INSERT INTO users (id, role, name, email, phone, password_hash, data)
-         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
-        [row.id, row.role, row.name, row.email, row.phone, row.password_hash, JSON.stringify(row.data)]
-      );
-      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
-        JSON.stringify({ collection: 'users', action: 'INSERT', id: row.id }),
-      ]);
+    if (mode === 'mongodb') {
+      await collection('users').insertOne(row);
     } else {
       store.users.unshift(row);
       persistSoon();
@@ -405,9 +370,9 @@ export function createDb(onChange) {
   }
 
   async function updateUser(id, patch) {
-    const current = mode === 'postgres'
-      ? (await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0]
-      : store.users.find((u) => u.id === id);
+    const current = mode === 'mongodb'
+      ? await collection('users').findOne({ id })
+      : store.users.find((user) => user.id === id);
     if (!current) return null;
     const data = { ...(current.data || {}), ...(patch.data || patch) };
     const next = {
@@ -420,17 +385,11 @@ export function createDb(onChange) {
       data,
       updated_at: new Date().toISOString(),
     };
-    if (mode === 'postgres') {
-      await pool.query(
-        `UPDATE users SET name=$2, email=$3, phone=$4, role=$5, password_hash=$6, data=$7::jsonb, updated_at=NOW()
-         WHERE id=$1`,
-        [id, next.name, next.email, next.phone, next.role, next.password_hash, JSON.stringify(next.data)]
-      );
-      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
-        JSON.stringify({ collection: 'users', action: 'UPDATE', id }),
-      ]);
+    if (mode === 'mongodb') {
+      const { _id, ...doc } = next;
+      await collection('users').replaceOne({ id }, doc);
     } else {
-      store.users = store.users.map((u) => (u.id === id ? next : u));
+      store.users = store.users.map((user) => (user.id === id ? next : user));
       persistSoon();
     }
     const pub = publicUser(next);
@@ -438,96 +397,93 @@ export function createDb(onChange) {
     return pub;
   }
 
-  async function list(collection, filter = {}) {
-    if (mode === 'postgres') {
-      const { rows } = await pool.query(
-        'SELECT id, data, created_at, updated_at FROM records WHERE collection = $1 ORDER BY created_at DESC',
-        [collection]
-      );
-      return rows
-        .map((row) => ({ id: row.id, ...row.data, createdAt: row.created_at, updatedAt: row.updated_at }))
-        .filter((rec) => matchesFilter(rec, filter));
+  async function removeUser(id) {
+    const current = mode === 'mongodb'
+      ? await collection('users').findOne({ id })
+      : store.users.find((user) => user.id === id);
+    if (!current) return null;
+    if (mode === 'mongodb') {
+      await collection('users').deleteOne({ id });
+    } else {
+      store.users = store.users.filter((user) => user.id !== id);
+      persistSoon();
     }
-    return (store.collections[collection] || []).filter((rec) => matchesFilter(rec, filter));
+    const pub = publicUser(current);
+    emit({ collection: 'users', action: 'delete', record: pub || { id } });
+    return pub;
   }
 
-  async function get(collection, id) {
-    if (mode === 'postgres') {
-      const { rows } = await pool.query(
-        'SELECT id, data, created_at, updated_at FROM records WHERE collection = $1 AND id = $2',
-        [collection, id]
-      );
-      if (!rows[0]) return null;
-      return { id: rows[0].id, ...rows[0].data, createdAt: rows[0].created_at, updatedAt: rows[0].updated_at };
+  async function list(name, filter = {}) {
+    if (mode === 'mongodb') {
+      const rows = await collection(name).find({}).sort({ createdAt: -1, created_at: -1 }).toArray();
+      return rows.map(withoutMongoId).filter((record) => matchesFilter(record, filter));
     }
-    return (store.collections[collection] || []).find((rec) => rec.id === id) || null;
+    return (store.collections[name] || []).filter((record) => matchesFilter(record, filter));
   }
 
-  async function create(collection, data) {
+  async function get(name, id) {
+    if (mode === 'mongodb') {
+      return withoutMongoId(await collection(name).findOne({ id }));
+    }
+    return (store.collections[name] || []).find((record) => record.id === id) || null;
+  }
+
+  async function create(name, data) {
     const record = {
       ...data,
       id: data.id,
       createdAt: data.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    if (mode === 'postgres') {
-      await pool.query(
-        `INSERT INTO records (id, collection, data) VALUES ($1,$2,$3::jsonb)`,
-        [record.id, collection, JSON.stringify(record)]
-      );
-      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
-        JSON.stringify({ collection, action: 'INSERT', id: record.id }),
-      ]);
+    if (mode === 'mongodb') {
+      await collection(name).insertOne(record);
     } else {
-      store.collections[collection] = [record, ...(store.collections[collection] || [])];
+      store.collections[name] = [record, ...(store.collections[name] || [])];
       persistSoon();
     }
-    emit({ collection, action: 'create', record });
+    emit({ collection: name, action: 'create', record });
     return record;
   }
 
-  async function update(collection, id, patch) {
-    const current = await get(collection, id);
+  async function updateRecord(name, id, patch) {
+    const current = await get(name, id);
     if (!current) return null;
     const record = { ...current, ...patch, id, updatedAt: new Date().toISOString() };
-    if (mode === 'postgres') {
-      await pool.query(
-        `UPDATE records SET data=$3::jsonb, updated_at=NOW() WHERE collection=$1 AND id=$2`,
-        [collection, id, JSON.stringify(record)]
-      );
-      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
-        JSON.stringify({ collection, action: 'UPDATE', id }),
-      ]);
+    if (mode === 'mongodb') {
+      await collection(name).replaceOne({ id }, record);
     } else {
-      store.collections[collection] = (store.collections[collection] || []).map((rec) =>
-        rec.id === id ? record : rec
+      store.collections[name] = (store.collections[name] || []).map((item) =>
+        item.id === id ? record : item
       );
       persistSoon();
     }
-    emit({ collection, action: 'update', record });
+    emit({ collection: name, action: 'update', record });
     return record;
   }
 
-  async function remove(collection, id) {
-    const current = await get(collection, id);
-    if (mode === 'postgres') {
-      await pool.query('DELETE FROM records WHERE collection = $1 AND id = $2', [collection, id]);
-      await pool.query(`SELECT pg_notify('ayudh_changes', $1)`, [
-        JSON.stringify({ collection, action: 'DELETE', id }),
-      ]);
+  async function removeRecord(name, id) {
+    const current = await get(name, id);
+    if (mode === 'mongodb') {
+      await collection(name).deleteOne({ id });
     } else {
-      store.collections[collection] = (store.collections[collection] || []).filter((rec) => rec.id !== id);
+      store.collections[name] = (store.collections[name] || []).filter((item) => item.id !== id);
       persistSoon();
     }
-    emit({ collection, action: 'delete', record: current || { id } });
+    emit({ collection: name, action: 'delete', record: current || { id } });
     return current;
   }
 
   async function counts() {
     const result = {};
+    if (mode === 'mongodb') {
+      for (const name of COLLECTIONS) {
+        result[name] = await collection(name).estimatedDocumentCount();
+      }
+      result.users = await collection('users').estimatedDocumentCount();
+      return result;
+    }
     for (const name of COLLECTIONS) {
-      const items = await list(name);
-      result[name] = items.length;
+      result[name] = (await list(name)).length;
     }
     result.users = (await listUsers()).length;
     return result;
@@ -549,23 +505,32 @@ export function createDb(onChange) {
     isEmpty,
     status,
     mode: () => mode,
-    postgresReady: () => mode === 'postgres',
+    mongoReady: () => mode === 'mongodb',
     listUsers,
     findUserByIdentifier,
     getUser,
     createUser,
     updateUser,
+    removeUser,
     list,
     get,
     create,
-    update,
-    remove,
+    update: updateRecord,
+    remove: removeRecord,
     counts,
     snapshot,
     persistNow: () => {
       if (mode === 'local') saveLocal(store);
     },
+    close: async () => {
+      await Promise.all(watchers.map((watcher) => watcher.close().catch(() => {})));
+      if (client) await client.close();
+    },
   };
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export { COLLECTIONS };

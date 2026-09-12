@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   X,
   User,
@@ -36,7 +36,8 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard
 } from 'lucide-react';
 import { DISTRICTS, SPECIALITIES } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
@@ -62,6 +63,15 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 }) => {
   const { register } = useAuth();
   const [selectedRole, setSelectedRole] = useState<RegistrationRole>(initialRole);
+  const [donationAmount, setDonationAmount] = useState('501');
+  const [customDonationAmount, setCustomDonationAmount] = useState('');
+  const [hospitalPlan, setHospitalPlan] = useState('Growth');
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+
+  useEffect(() => {
+    setPaymentConfirmed(false);
+    setErrors((prev) => ({ ...prev, payment: '' }));
+  }, [selectedRole]);
   
   // Patient Form Steps: 1: Personal & Identity, 2: Contact & Address, 3: Health & Emergency, 4: Docs & Signature, 5: Review, 6: Success
   const [patientStep, setPatientStep] = useState<number>(1);
@@ -144,6 +154,113 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     submittedAt: string;
     status: 'SUBMITTED' | 'UNDER REVIEW' | 'APPROVED';
   } | null>(null);
+
+  const hospitalPlans = [
+    { name: 'Starter', amount: 2999, features: 'Profile listing, patient enquiries, basic dashboard' },
+    { name: 'Growth', amount: 5999, features: 'Priority listing, visit requests, doctor roster tools' },
+    { name: 'Premium', amount: 8999, features: 'Top placement, analytics, unlimited doctor management' },
+  ];
+
+  const selectedHospitalPlan = hospitalPlans.find((plan) => plan.name === hospitalPlan) || hospitalPlans[1];
+  const payableDonation = Number(customDonationAmount || donationAmount || 0);
+
+  const paymentPayloadForRole = (role: string) => {
+    if (role === 'hospital') {
+      return {
+        paymentType: 'subscription',
+        subscriptionPlan: selectedHospitalPlan.name,
+        subscriptionAmount: selectedHospitalPlan.amount,
+        subscriptionFeatures: selectedHospitalPlan.features,
+        paymentStatus: 'Paid',
+        paymentReference: `AV-SUB-${Date.now()}`,
+      };
+    }
+    return {
+      paymentType: 'donation',
+      donationAmount: payableDonation,
+      paymentStatus: 'Paid',
+      paymentReference: `AV-DON-${Date.now()}`,
+    };
+  };
+
+  const renderPaymentStep = (role: RegistrationRole | string) => {
+    const isHospital = role === 'hospital' || role === 'Hospital';
+    return (
+      <div className="bg-slate-950 text-white rounded-xl p-4 border border-slate-800 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-emerald-300" />
+            <div>
+              <h4 className="text-xs font-black uppercase">{isHospital ? 'Hospital Subscription Plan' : 'Registration Donation'}</h4>
+              <p className="text-[11px] text-slate-300">
+                {isHospital ? 'Choose a plan before the hospital account is activated.' : 'Complete a donation as the final registration step.'}
+              </p>
+            </div>
+          </div>
+          <span className={`text-[10px] font-black px-2 py-1 rounded-full ${paymentConfirmed ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-slate-950'}`}>
+            {paymentConfirmed ? 'PAYMENT READY' : 'PENDING'}
+          </span>
+        </div>
+
+        {isHospital ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {hospitalPlans.map((plan) => (
+              <button
+                key={plan.name}
+                type="button"
+                onClick={() => {
+                  setHospitalPlan(plan.name);
+                  setPaymentConfirmed(false);
+                }}
+                className={`rounded-lg border p-3 text-left transition-all cursor-pointer ${hospitalPlan === plan.name ? 'bg-emerald-500 text-white border-emerald-300' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+              >
+                <div className="text-xs font-black">{plan.name}</div>
+                <div className="text-lg font-black">Rs. {plan.amount}</div>
+                <div className="text-[10px] leading-snug opacity-80">{plan.features}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {['101', '251', '501', '1001'].map((amount) => (
+              <button
+                key={amount}
+                type="button"
+                onClick={() => {
+                  setDonationAmount(amount);
+                  setCustomDonationAmount('');
+                  setPaymentConfirmed(false);
+                }}
+                className={`rounded-lg border px-3 py-2 text-xs font-black cursor-pointer ${donationAmount === amount && !customDonationAmount ? 'bg-emerald-500 text-white border-emerald-300' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+              >
+                Rs. {amount}
+              </button>
+            ))}
+            <input
+              value={customDonationAmount}
+              onChange={(e) => {
+                setCustomDonationAmount(e.target.value);
+                setPaymentConfirmed(false);
+              }}
+              type="number"
+              min="1"
+              placeholder="Custom"
+              className="rounded-lg border border-white/10 bg-white text-slate-900 px-3 py-2 text-xs font-bold"
+            />
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setPaymentConfirmed(true)}
+          className="w-full rounded-lg bg-white text-slate-950 py-2.5 text-xs font-black hover:bg-emerald-50 cursor-pointer"
+        >
+          Confirm {isHospital ? `Rs. ${selectedHospitalPlan.amount} Subscription` : `Rs. ${payableDonation || 0} Donation`}
+        </button>
+        {errors.payment && <p className="text-[11px] font-bold text-amber-300">{errors.payment}</p>}
+      </div>
+    );
+  };
 
   // Doctor Form State
   const [doctorData, setDoctorData] = useState({
@@ -464,6 +581,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    if (!paymentConfirmed || payableDonation <= 0) {
+      setErrors({ payment: 'Please confirm the final registration donation before submitting.' });
+      return;
+    }
     if (!patientData.declarationAgreed) {
       setErrors({ declarationAgreed: 'దయచేసి డిక్లరేషన్ నిబంధనలను అంగీకరించండి / Please accept the declaration' });
       return;
@@ -480,6 +601,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       const res = await register({
         role: 'patient',
         ...safePatient,
+        ...paymentPayloadForRole('patient'),
         password: patientData.password,
       });
       const patientId = res.patientId || res.user.patientId || `AV-PAT-2026-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -536,11 +658,17 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       setErrors(pwdErrs);
       return;
     }
+    const role = roleMap[roleName] || 'patient';
+    if (!paymentConfirmed || (role !== 'hospital' && payableDonation <= 0)) {
+      setErrors({ payment: role === 'hospital' ? 'Please confirm a hospital subscription plan before submitting.' : 'Please confirm the registration donation before submitting.' });
+      return;
+    }
     const { confirmPassword, ...safeData } = data;
     try {
       await register({
-        role: roleMap[roleName] || 'patient',
+        role,
         ...safeData,
+        ...paymentPayloadForRole(role),
         password: data.password,
         phone: data.mobile || data.mobileNumber || data.contactPhone || '',
         mobileNumber: data.mobile || data.mobileNumber || data.contactPhone || '',
@@ -555,6 +683,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setPatientStep(1);
     setRegistrationResult(null);
     setNonPatientSubmitted(null);
+    setPaymentConfirmed(false);
     onClose();
   };
 
@@ -719,6 +848,11 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         {/* MODAL BODY CONTENT */}
         {/* ========================================================================= */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50">
+          {selectedRole !== 'patient' && selectedRole !== 'hospital' && nonPatientSubmitted === null && (
+            <div className="mb-4">
+              {renderPaymentStep(selectedRole)}
+            </div>
+          )}
           
           {/* ===================================================================== */}
           {/* ROLE 1: PATIENT REGISTRATION FORM (THE AUTHORITATIVE SPECIFICATION) */}
@@ -1674,6 +1808,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       <span>Declaration accepted and E-Signed as: <strong>{patientData.signatureText || patientData.fullName}</strong></span>
                     </div>
 
+                    {renderPaymentStep('patient')}
+
                   </div>
 
                   <div className="flex justify-between pt-2">
@@ -2131,6 +2267,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       (value) => setHospitalData({ ...hospitalData, confirmPassword: value }),
                       'focus:ring-amber-600'
                     )}
+
+                    <div className="pt-2">
+                      {renderPaymentStep('hospital')}
+                    </div>
 
                     <button
                       type="submit"

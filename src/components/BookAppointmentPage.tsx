@@ -78,7 +78,9 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
     name: 'Ramesh Kumar',
     displayName: 'Ramesh K.',
     patientId: 'AVP100245',
-    image: '/src/assets/images/patient_avatar_1787229395408.jpg'
+    image: '/src/assets/images/patient_avatar_1787229395408.jpg',
+    phone: '',
+    email: ''
   },
   onNavigateDashboard,
   onLogout,

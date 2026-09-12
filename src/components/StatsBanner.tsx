@@ -28,8 +28,8 @@ export const StatsBanner: React.FC = () => {
   ];
 
   return (
-    <div className="bg-[#0a192f] text-white py-5 px-4 sm:px-8 border-y border-slate-800">
-      <div className="max-w-7xl mx-auto">
+    <div className="bg-[#0a192f] text-white py-5 px-4 sm:px-8 lg:px-14 border-y border-slate-800">
+      <div className="w-full">
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-800">
           {stats.map((item, idx) => {
             const IconComponent = item.icon;

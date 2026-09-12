@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { TopBar } from './components/TopBar';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
@@ -41,21 +41,62 @@ const getSavedState = <T,>(key: string, defaultValue: T): T => {
   return defaultValue;
 };
 
+type AppRoute =
+  | 'home'
+  | 'login'
+  | 'partner'
+  | 'bookAppointment'
+  | 'ambulance'
+  | 'labTests'
+  | 'homeService'
+  | 'hospitalGuidance'
+  | 'emergency'
+  | 'healthCamps'
+  | 'partnerHospitals'
+  | 'dashboard';
+
+const ROUTE_PATHS: Record<AppRoute, string> = {
+  home: '/',
+  login: '/login',
+  partner: '/partner-with-us',
+  bookAppointment: '/book-appointment',
+  ambulance: '/ambulance-booking',
+  labTests: '/lab-tests',
+  homeService: '/home-care',
+  hospitalGuidance: '/hospital-guidance',
+  emergency: '/emergency-support',
+  healthCamps: '/health-camps',
+  partnerHospitals: '/partner-hospitals',
+  dashboard: '/dashboard',
+};
+
+const PATH_ROUTES: Record<string, AppRoute> = Object.entries(ROUTE_PATHS).reduce(
+  (acc, [route, path]) => ({ ...acc, [path]: route as AppRoute }),
+  {} as Record<string, AppRoute>
+);
+
+const getRouteFromPath = (pathname: string): AppRoute => {
+  const cleanPath = pathname.replace(/\/+$/, '') || '/';
+  return PATH_ROUTES[cleanPath] || 'home';
+};
+
+const initialRoute = typeof window !== 'undefined' ? getRouteFromPath(window.location.pathname) : 'home';
+
 export default function App() {
   const { user, isLoggedIn, logout } = useAuth();
   const userRole = user?.role || 'patient';
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [activeTab, setActiveTab] = useState<string>(() => getSavedState('ayudh_activeTab', 'home'));
-  const [isLoginView, setIsLoginView] = useState<boolean>(() => getSavedState('ayudh_isLoginView', false));
-  const [isPartnerView, setIsPartnerView] = useState<boolean>(() => getSavedState('ayudh_isPartnerView', false));
-  const [isBookAppointmentView, setIsBookAppointmentView] = useState<boolean>(() => getSavedState('ayudh_isBookAppointmentView', false));
-  const [isAmbulanceView, setIsAmbulanceView] = useState<boolean>(() => getSavedState('ayudh_isAmbulanceView', false));
-  const [isLabTestsView, setIsLabTestsView] = useState<boolean>(() => getSavedState('ayudh_isLabTestsView', false));
-  const [isHomeServiceView, setIsHomeServiceView] = useState<boolean>(() => getSavedState('ayudh_isHomeServiceView', false));
-  const [isHospitalGuidanceView, setIsHospitalGuidanceView] = useState<boolean>(() => getSavedState('ayudh_isHospitalGuidanceView', false));
-  const [isEmergencyView, setIsEmergencyView] = useState<boolean>(() => getSavedState('ayudh_isEmergencyView', false));
-  const [isHealthCampsView, setIsHealthCampsView] = useState<boolean>(() => getSavedState('ayudh_isHealthCampsView', false));
-  const [isPartnerHospitalsView, setIsPartnerHospitalsView] = useState<boolean>(() => getSavedState('ayudh_isPartnerHospitalsView', false));
+  const [isLoginView, setIsLoginView] = useState<boolean>(() => initialRoute === 'login');
+  const [isPartnerView, setIsPartnerView] = useState<boolean>(() => initialRoute === 'partner');
+  const [isBookAppointmentView, setIsBookAppointmentView] = useState<boolean>(() => initialRoute === 'bookAppointment');
+  const [isAmbulanceView, setIsAmbulanceView] = useState<boolean>(() => initialRoute === 'ambulance');
+  const [isLabTestsView, setIsLabTestsView] = useState<boolean>(() => initialRoute === 'labTests');
+  const [isHomeServiceView, setIsHomeServiceView] = useState<boolean>(() => initialRoute === 'homeService');
+  const [isHospitalGuidanceView, setIsHospitalGuidanceView] = useState<boolean>(() => initialRoute === 'hospitalGuidance');
+  const [isEmergencyView, setIsEmergencyView] = useState<boolean>(() => initialRoute === 'emergency');
+  const [isHealthCampsView, setIsHealthCampsView] = useState<boolean>(() => initialRoute === 'healthCamps');
+  const [isPartnerHospitalsView, setIsPartnerHospitalsView] = useState<boolean>(() => initialRoute === 'partnerHospitals');
   const [patientActiveTab, setPatientActiveTab] = useState<string>(() => getSavedState('ayudh_patientActiveTab', 'dashboard'));
   const [pendingAfterRegister, setPendingAfterRegister] = useState<{
     type: 'hospital_visit' | 'tab';
@@ -129,6 +170,72 @@ export default function App() {
     setIsHealthCampsView(false);
     setIsPartnerHospitalsView(false);
   };
+
+  const getActiveRoute = useCallback((): AppRoute => {
+    if (isLoggedIn) return 'dashboard';
+    if (isLoginView) return 'login';
+    if (isPartnerView) return 'partner';
+    if (isBookAppointmentView) return 'bookAppointment';
+    if (isAmbulanceView) return 'ambulance';
+    if (isLabTestsView) return 'labTests';
+    if (isHomeServiceView) return 'homeService';
+    if (isHospitalGuidanceView) return 'hospitalGuidance';
+    if (isEmergencyView) return 'emergency';
+    if (isHealthCampsView) return 'healthCamps';
+    if (isPartnerHospitalsView) return 'partnerHospitals';
+    return 'home';
+  }, [
+    isLoggedIn,
+    isLoginView,
+    isPartnerView,
+    isBookAppointmentView,
+    isAmbulanceView,
+    isLabTestsView,
+    isHomeServiceView,
+    isHospitalGuidanceView,
+    isEmergencyView,
+    isHealthCampsView,
+    isPartnerHospitalsView,
+  ]);
+
+  const applyRoute = useCallback((route: AppRoute) => {
+    setActiveModal(null);
+    setIsLoginView(route === 'login' && !isLoggedIn);
+    setIsPartnerView(route === 'partner');
+    setIsBookAppointmentView(route === 'bookAppointment');
+    setIsAmbulanceView(route === 'ambulance');
+    setIsLabTestsView(route === 'labTests');
+    setIsHomeServiceView(route === 'homeService');
+    setIsHospitalGuidanceView(route === 'hospitalGuidance');
+    setIsEmergencyView(route === 'emergency');
+    setIsHealthCampsView(route === 'healthCamps');
+    setIsPartnerHospitalsView(route === 'partnerHospitals');
+    setActiveTab(route === 'healthCamps' ? 'camps' : route === 'partnerHospitals' ? 'hospitals' : 'home');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    const activeRoute = getActiveRoute();
+    const targetPath = ROUTE_PATHS[activeRoute];
+    const currentRoute = getRouteFromPath(window.location.pathname);
+    const currentCanonicalPath = ROUTE_PATHS[currentRoute];
+    const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+
+    if (currentPath !== currentCanonicalPath) {
+      window.history.replaceState({ appRoute: currentRoute }, '', currentCanonicalPath);
+    } else if (window.location.pathname !== targetPath) {
+      window.history.pushState({ appRoute: activeRoute }, '', targetPath);
+    }
+  }, [getActiveRoute]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      applyRoute(getRouteFromPath(window.location.pathname));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [applyRoute]);
 
   const userProfile = {
     name: user?.name || 'Guest',
