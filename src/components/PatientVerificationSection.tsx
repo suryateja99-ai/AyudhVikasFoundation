@@ -261,6 +261,24 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
     emergencyContactPhone: ''
   });
 
+  const authorizeVerifiedPatient = (patient: VerifiedAyudhPatient, method: string) => {
+    api.verifyPatientSession({
+      patientId: patient.memberId || patient.uhid,
+      memberId: patient.memberId,
+      uhid: patient.uhid,
+      phone: patient.phone,
+      name: patient.name,
+      patientName: patient.name,
+      age: patient.age,
+      gender: patient.gender,
+      bloodGroup: patient.bloodGroup,
+      method,
+      chiefComplaint: walkInChiefComplaint,
+    }).catch((err) => {
+      console.warn('Patient authorization session was not created:', err);
+    });
+  };
+
   // Camera stream handler
   const startCameraStream = async () => {
     setCameraError(null);
@@ -335,6 +353,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
       setVerifiedMethod('Ayudh Vikas Member ID');
       setVerifiedPatient(foundEntry);
       setVerificationError(null);
+      authorizeVerifiedPatient(foundEntry, 'Ayudh Vikas Member ID');
       if (onPatientVerified) onPatientVerified(foundEntry, 'Ayudh Vikas Member ID');
     }).catch(() => {
       setIsVerifying(false);
@@ -349,6 +368,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
       if (foundEntry) {
         setVerifiedPatient(foundEntry);
         setVerificationError(null);
+        authorizeVerifiedPatient(foundEntry, 'Ayudh Vikas Member ID');
         if (onPatientVerified) onPatientVerified(foundEntry, 'Ayudh Vikas Member ID');
       } else {
         setVerifiedPatient(null);
@@ -394,6 +414,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
         setVerifiedPatient(found);
         setPatientIdInput(found.memberId);
         setVerificationError(null);
+        authorizeVerifiedPatient(found, 'Physical Smart Card QR Scan');
         if (onPatientVerified) {
           onPatientVerified(found, 'Physical Smart Card QR Scan');
         }
@@ -424,6 +445,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
 
       setVerifiedPatient(matchedMember);
       setPatientIdInput(matchedMember.memberId);
+      authorizeVerifiedPatient(matchedMember, 'Uploaded Smart Card Image');
       if (onPatientVerified) {
         onPatientVerified(matchedMember, 'Uploaded Smart Card Image');
       }
@@ -498,6 +520,7 @@ export const PatientVerificationSection: React.FC<PatientVerificationSectionProp
     setShowNewRegistrationModal(false);
     setHasSearched(true);
     setVerifiedMethod('New Walk-In Member Registration');
+    authorizeVerifiedPatient(newRecord, 'New Walk-In Member Registration');
     if (onPatientVerified) {
       onPatientVerified(newRecord, 'New Walk-In Member Registration');
     }

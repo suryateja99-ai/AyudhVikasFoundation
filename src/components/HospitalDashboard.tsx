@@ -32,6 +32,7 @@ import {
 import { Doctor, HospitalPartner, HospitalVisitRequest, SeniorDoctor } from '../types';
 import { INITIAL_HOSPITAL_VISIT_REQUESTS, PARTNER_HOSPITALS, SPECIALITIES } from '../data/mockData';
 import { PatientVerificationSection, VerifiedAyudhPatient } from './PatientVerificationSection';
+import { ClinicalSessionPanel } from './ClinicalSessionPanel';
 import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
 import { api } from '../lib/api';
@@ -897,6 +898,9 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
   const renderGenericPanel = () => {
     if (activeNav === 'Patients') {
       return <PatientVerificationSection onPatientVerified={handlePatientVerified} onWalkInAddedToQueue={handleWalkInAddedToQueue} />;
+    }
+    if (activeNav === 'Reports' || activeNav === 'Prescriptions') {
+      return <ClinicalSessionPanel roleLabel="Hospital" title="Authorized Patients" />;
     }
     if (activeNav === 'Doctors Management') return renderDoctorsManagement();
     if (activeNav === 'Appointments') return renderAppointments();

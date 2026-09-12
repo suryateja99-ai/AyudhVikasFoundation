@@ -56,6 +56,7 @@ import { useLiveData } from '../context/LiveDataContext';
 import { LiveStatusBadge } from './LiveStatusBadge';
 import { BrandLogo } from './BrandLogo';
 import { NotificationBell } from './NotificationBell';
+import { ClinicalSessionPanel } from './ClinicalSessionPanel';
 
 export interface DoctorPatientRecord {
   id: string;
@@ -1954,7 +1955,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 </div>
               )}
 
-              {['Prescriptions', 'Reports', 'Messages', 'Notifications', 'Settings'].includes(activeNav) && (
+              {['Prescriptions', 'Reports'].includes(activeNav) && (
+                <ClinicalSessionPanel roleLabel="Doctor" title="Authorized Patients" />
+              )}
+
+              {['Messages', 'Notifications', 'Settings'].includes(activeNav) && (
                 <div className="text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <p>All real-time clinical data and settings for <strong>Dr. Ravi Teja</strong> are synced with Ayudh Vikas Hospital Network.</p>
                 </div>

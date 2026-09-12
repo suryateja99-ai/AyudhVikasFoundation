@@ -36,6 +36,18 @@ const PORT = Number(process.env.PORT || 4000);
 const app = express();
 const server = http.createServer(app);
 const sseClients = new Set();
+const AUTHORIZED_SESSION_STATUSES = new Set([
+  'Accepted',
+  'Approved',
+  'Confirmed',
+  'Scheduled',
+  'Arrived',
+  'Verified',
+  'Active',
+  'Completed',
+]);
+const CLOSED_SESSION_STATUSES = new Set(['Completed', 'SESSION_FINISHED']);
+const SENSITIVE_COLLECTIONS = new Set(['health_records', 'prescriptions', 'reminders']);
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -141,6 +153,239 @@ function paginate(items, query) {
 }
 
 app.use(authOptional);
+
+function isAuthorizedStatus(status) {
+  return AUTHORIZED_SESSION_STATUSES.has(String(status || '').trim());
+}
+
+function isCompletedSession(session) {
+  return CLOSED_SESSION_STATUSES.has(String(session?.status || '')) ||
+    CLOSED_SESSION_STATUSES.has(String(session?.sessionStatus || ''));
+}
+
+function cleanPhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function sameText(a, b) {
+  return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+}
+
+function formatDateTime(value = new Date()) {
+  return new Date(value).toISOString();
+}
+
+async function getActor(req) {
+  if (!req.user?.id) return null;
+  const user = await db.getUser(req.user.id);
+  if (!user) return null;
+  let hospital = null;
+  let doctor = null;
+  if (user.role === 'hospital') {
+    const hospitals = await db.list('hospitals');
+    hospital = hospitals.find((item) =>
+      item.id === user.hospitalId ||
+      item.id === user.data?.hospitalId ||
+      sameText(item.name, user.hospitalName || user.name) ||
+      sameText(item.shortName, user.hospitalName || user.name)
+    ) || null;
+  }
+  if (user.role === 'doctor') {
+    const doctors = await db.list('doctors');
+    doctor = doctors.find((item) =>
+      item.id === user.doctorId ||
+      item.id === user.data?.doctorId ||
+      sameText(item.name, user.name) ||
+      cleanPhone(item.phone) === cleanPhone(user.phone)
+    ) || null;
+  }
+  return {
+    user,
+    role: user.role,
+    patientId: user.patientId,
+    hospitalId: user.hospitalId || hospital?.id,
+    hospitalName: hospital?.name || user.hospitalName || user.name,
+    doctorId: user.doctorId || doctor?.id,
+    doctorName: doctor?.name || user.name,
+    hospital,
+    doctor,
+  };
+}
+
+function actorOwnsSession(actor, session) {
+  if (!actor || !session) return false;
+  if (actor.role === 'admin') return true;
+  if (actor.role === 'patient') return String(session.patientId || '') === String(actor.patientId || '');
+  if (actor.role === 'hospital') {
+    return (
+      String(session.hospitalId || '') === String(actor.hospitalId || '') ||
+      sameText(session.hospitalName, actor.hospitalName)
+    );
+  }
+  if (actor.role === 'doctor') {
+    return (
+      String(session.doctorId || '') === String(actor.doctorId || '') ||
+      sameText(session.doctorName, actor.doctorName)
+    );
+  }
+  return false;
+}
+
+function normalizeSession(session, collection) {
+  if (!session) return null;
+  return {
+    ...session,
+    sessionId: session.sessionId || session.id,
+    sourceCollection: collection,
+    sessionStatus: session.sessionStatus || (isCompletedSession(session) ? 'COMPLETED' : isAuthorizedStatus(session.status) ? 'ACTIVE' : 'AUTHORIZED'),
+    visitPassStatus: session.visitPassStatus || (isCompletedSession(session) ? 'EXPIRED' : isAuthorizedStatus(session.status) ? 'ACTIVE' : 'PENDING'),
+  };
+}
+
+async function findSession(sessionId) {
+  const visit = await db.get('visit_requests', sessionId);
+  if (visit) return normalizeSession(visit, 'visit_requests');
+  const appointment = await db.get('appointments', sessionId);
+  if (appointment) return normalizeSession(appointment, 'appointments');
+  const visits = await db.list('visit_requests');
+  const byVisitSession = visits.find((item) => item.sessionId === sessionId || item.requestId === sessionId);
+  if (byVisitSession) return normalizeSession(byVisitSession, 'visit_requests');
+  const appointments = await db.list('appointments');
+  const byAppointmentSession = appointments.find((item) => item.sessionId === sessionId || item.tokenNumber === sessionId);
+  if (byAppointmentSession) return normalizeSession(byAppointmentSession, 'appointments');
+  return null;
+}
+
+async function getPatientRecord(patientId, phone) {
+  const patients = await db.list('patients');
+  return patients.find((patient) =>
+    patient.id === patientId ||
+    patient.patientId === patientId ||
+    cleanPhone(patient.phone) === cleanPhone(phone)
+  ) || null;
+}
+
+async function getAuthorizedSessions(actor) {
+  const [visits, appointments] = await Promise.all([
+    db.list('visit_requests'),
+    db.list('appointments'),
+  ]);
+  return [
+    ...visits.map((item) => normalizeSession(item, 'visit_requests')),
+    ...appointments.map((item) => normalizeSession(item, 'appointments')),
+  ].filter((session) => actorOwnsSession(actor, session) && isAuthorizedStatus(session.status));
+}
+
+function canMutateSensitiveCollection(actor, collection, payload = {}, existing = null) {
+  if (!SENSITIVE_COLLECTIONS.has(collection)) return true;
+  if (!actor) return false;
+  if (actor.role === 'admin') return true;
+  const target = existing || payload;
+  if (actor.role === 'patient') {
+    return ['reminders', 'health_records'].includes(collection) &&
+      String(target.patientId || actor.patientId || '') === String(actor.patientId || '');
+  }
+  if (actor.role === 'hospital') {
+    return String(target.hospitalId || actor.hospitalId || '') === String(actor.hospitalId || '');
+  }
+  if (actor.role === 'doctor') {
+    return String(target.doctorId || actor.doctorId || '') === String(actor.doctorId || '');
+  }
+  return false;
+}
+
+async function scopedSensitiveList(actor, collection, filter = {}) {
+  const rows = await db.list(collection, filter);
+  if (!SENSITIVE_COLLECTIONS.has(collection)) return rows;
+  if (!actor) return [];
+  if (actor.role === 'admin') return rows;
+  if (actor.role === 'patient') return rows.filter((item) => String(item.patientId || '') === String(actor.patientId || ''));
+  if (actor.role === 'hospital') {
+    return rows.filter((item) => String(item.hospitalId || '') === String(actor.hospitalId || '') || sameText(item.hospitalName, actor.hospitalName));
+  }
+  if (actor.role === 'doctor') {
+    return rows.filter((item) => String(item.doctorId || '') === String(actor.doctorId || '') || sameText(item.doctorName, actor.doctorName));
+  }
+  return [];
+}
+
+async function assertSessionAccess(req, res, sessionId, { allowCompleted = false, roles = ['doctor', 'hospital', 'admin'] } = {}) {
+  const actor = await getActor(req);
+  if (!actor) {
+    res.status(401).json({ error: 'Please sign in to continue.' });
+    return null;
+  }
+  if (!roles.includes(actor.role)) {
+    res.status(403).json({ error: 'This action is not available for your role.' });
+    return null;
+  }
+  const session = await findSession(sessionId);
+  if (!session) {
+    res.status(404).json({ error: 'Visit/session not found.' });
+    return null;
+  }
+  if (!actorOwnsSession(actor, session)) {
+    res.status(403).json({ error: 'This patient session is not authorized for your account.' });
+    return null;
+  }
+  if (!isAuthorizedStatus(session.status)) {
+    res.status(403).json({ error: 'The patient is not authorized for this session yet.' });
+    return null;
+  }
+  if (!allowCompleted && isCompletedSession(session)) {
+    res.status(409).json({ error: 'This patient session has already been completed.' });
+    return null;
+  }
+  return { actor, session };
+}
+
+function parseMedicineReminderTimes(frequency = '') {
+  const text = String(frequency || '').toLowerCase();
+  if (text.includes('thrice') || text.includes('three') || text.includes('3')) return ['08:00 AM', '02:00 PM', '08:00 PM'];
+  if (text.includes('twice') || text.includes('two') || text.includes('2') || text.includes('morning') && text.includes('night')) return ['08:00 AM', '08:00 PM'];
+  if (text.includes('night') || text.includes('dinner')) return ['08:00 PM'];
+  if (text.includes('afternoon') || text.includes('lunch')) return ['02:00 PM'];
+  return ['08:00 AM'];
+}
+
+async function createPrescriptionReminders(prescription, actor, session) {
+  const medicines = Array.isArray(prescription.medicines) ? prescription.medicines : [];
+  const created = [];
+  for (const med of medicines) {
+    const medicine = String(med.medicine || med.name || '').trim();
+    if (!medicine) continue;
+    const times = parseMedicineReminderTimes(`${med.frequency || ''} ${med.instructions || ''}`);
+    for (const time of times) {
+      created.push(await db.create('reminders', {
+        id: makeId('REM'),
+        patientId: session.patientId,
+        patientName: session.patientName,
+        sessionId: session.sessionId || session.id,
+        sourceCollection: session.sourceCollection,
+        prescriptionId: prescription.id,
+        title: `Take ${medicine}`,
+        description: med.instructions || prescription.instructions || 'Follow the prescription instructions.',
+        time,
+        recurrence: med.frequency || 'Daily',
+        duration: med.duration || '',
+        type: 'Medication',
+        category: 'Medicine reminder',
+        enabled: true,
+        mandatory: true,
+        autoGenerated: true,
+        sourceType: 'prescription',
+        createdBy: actor.user.id,
+        createdByRole: actor.role,
+        hospitalId: session.hospitalId || actor.hospitalId,
+        hospitalName: session.hospitalName || actor.hospitalName,
+        doctorId: session.doctorId || actor.doctorId,
+        doctorName: session.doctorName || actor.doctorName,
+        status: 'Active',
+      }));
+    }
+  }
+  return created;
+}
 
 app.get('/api/health', async (_req, res) => {
   const counts = db ? await db.counts() : {};
@@ -465,6 +710,365 @@ app.get('/api/bootstrap', async (req, res) => {
 
 app.get('/api/stats', async (_req, res) => {
   res.json({ mode: db.mode(), mongodb: db.mongoReady(), ...(await db.counts()) });
+});
+
+app.get('/api/authorized-patients', authRequired, async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    if (!['doctor', 'hospital', 'admin'].includes(actor?.role)) {
+      return res.status(403).json({ error: 'Only hospital, doctor, or admin users can view authorized patients.' });
+    }
+    const sessions = (await getAuthorizedSessions(actor)).filter((session) => !isCompletedSession(session));
+    const grouped = new Map();
+    for (const session of sessions) {
+      const key = session.patientId || session.patientPhone || session.phone || session.patientName;
+      if (!key) continue;
+      const current = grouped.get(key) || {
+        patientId: session.patientId,
+        patientName: session.patientName || session.name || 'Authorized Patient',
+        phone: session.patientPhone || session.phone || '',
+        age: session.patientAge || session.age || '',
+        gender: session.patientGender || session.gender || '',
+        bloodGroup: session.bloodGroup || '',
+        sessions: [],
+      };
+      current.sessions.push(session);
+      grouped.set(key, current);
+    }
+    const patients = [];
+    for (const patient of grouped.values()) {
+      const registry = await getPatientRecord(patient.patientId, patient.phone);
+      const sortedSessions = patient.sessions.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+      if (!sortedSessions.length) continue;
+      patients.push({
+        ...patient,
+        patientId: patient.patientId || registry?.patientId || registry?.id,
+        patientName: registry?.fullName || registry?.name || patient.patientName,
+        phone: registry?.phone || patient.phone,
+        age: registry?.age || patient.age,
+        gender: registry?.gender || patient.gender,
+        bloodGroup: registry?.bloodGroup || patient.bloodGroup,
+        address: registry?.address || '',
+        activeSession: sortedSessions[0],
+        sessions: sortedSessions,
+      });
+    }
+    res.json({ items: patients, sessions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load authorized patients.' });
+  }
+});
+
+app.post('/api/authorized-patients/verify', authRequired, async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    if (!['doctor', 'hospital'].includes(actor?.role)) {
+      return res.status(403).json({ error: 'Only hospital and doctor users can verify patient sessions.' });
+    }
+    const body = req.body || {};
+    const q = String(body.patientId || body.memberId || body.uhid || body.phone || body.name || '').trim();
+    if (!q) return res.status(400).json({ error: 'Patient ID, mobile, or UHID is required.' });
+    const patient = await getPatientRecord(q, body.phone || q);
+    const patientId = patient?.patientId || patient?.id || body.patientId || body.memberId || body.uhid;
+    const patientName = patient?.fullName || patient?.name || body.patientName || body.name || 'Verified Patient';
+    const patientPhone = patient?.phone || body.phone || '';
+    const sessions = await getAuthorizedSessions(actor);
+    const existing = sessions.find((session) =>
+      !isCompletedSession(session) &&
+      (String(session.patientId || '') === String(patientId || '') || cleanPhone(session.patientPhone || session.phone) === cleanPhone(patientPhone))
+    );
+    if (existing) return res.json({ item: existing, existing: true });
+
+    const base = {
+      patientId,
+      patientName,
+      patientPhone,
+      patientAge: patient?.age || body.age,
+      patientGender: patient?.gender || body.gender,
+      bloodGroup: patient?.bloodGroup || body.bloodGroup,
+      chiefComplaint: body.chiefComplaint || 'Direct patient verification / visit authorization',
+      authorizationSource: body.method || 'Patient verification',
+      authorizedAt: formatDateTime(),
+      authorizedBy: actor.user.id,
+      authorizedByRole: actor.role,
+      sessionStatus: 'ACTIVE',
+      visitPassStatus: 'ACTIVE',
+      tokenNumber: body.tokenNumber || `TK-${Math.floor(10 + Math.random() * 90)}`,
+      reportingRoom: body.reportingRoom || 'Ayudh Vikas Helpdesk / OPD Counter',
+      status: 'Arrived',
+    };
+    const item = actor.role === 'hospital'
+      ? await db.create('visit_requests', {
+          id: makeId('HVR'),
+          requestId: `AV-VISIT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          ...base,
+          hospitalId: actor.hospitalId,
+          hospitalName: actor.hospitalName,
+          department: body.department || 'General Medicine',
+          doctorId: body.doctorId,
+          doctorName: body.doctorName || 'Senior Duty Specialist',
+          preferredDate: body.preferredDate || new Date().toISOString().slice(0, 10),
+          preferredTimeSlot: body.preferredTimeSlot || 'Walk-in',
+          visitType: body.visitType || 'OP Consultation',
+        })
+      : await db.create('appointments', {
+          id: makeId('APT'),
+          ...base,
+          doctorId: actor.doctorId,
+          doctorName: actor.doctorName,
+          hospitalId: body.hospitalId || actor.doctor?.hospitalId,
+          hospitalName: body.hospitalName || actor.doctor?.hospitalName || actor.doctor?.hospital || 'Ayudh Network',
+          appointmentDate: body.appointmentDate || new Date().toISOString().slice(0, 10),
+          appointmentTime: body.appointmentTime || 'Walk-in',
+          visitType: body.visitType || 'Consultation',
+          reason: body.chiefComplaint || 'Direct walk-in consultation',
+        });
+    res.status(201).json({ item: normalizeSession(item, actor.role === 'hospital' ? 'visit_requests' : 'appointments') });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Patient verification failed.' });
+  }
+});
+
+app.get('/api/patients/:patientId/sessions', authRequired, async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    const patientId = req.params.patientId;
+    if (actor.role === 'patient' && String(actor.patientId) !== String(patientId)) {
+      return res.status(403).json({ error: 'You can view only your own sessions.' });
+    }
+    const sessions = [
+      ...(await db.list('visit_requests')).map((item) => normalizeSession(item, 'visit_requests')),
+      ...(await db.list('appointments')).map((item) => normalizeSession(item, 'appointments')),
+    ].filter((session) =>
+      String(session.patientId || '') === String(patientId || '') &&
+      (actor.role === 'patient' || actor.role === 'admin' || actorOwnsSession(actor, session))
+    );
+    res.json({ items: sessions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load patient sessions.' });
+  }
+});
+
+app.get('/api/sessions/history', authRequired, async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    if (!['doctor', 'hospital', 'admin'].includes(actor?.role)) {
+      return res.status(403).json({ error: 'Only hospital, doctor, or admin users can view session history.' });
+    }
+    const sessions = (await getAuthorizedSessions(actor))
+      .filter((session) => isCompletedSession(session))
+      .sort((a, b) => String(b.completedAt || b.updatedAt || b.createdAt || '').localeCompare(String(a.completedAt || a.updatedAt || a.createdAt || '')));
+
+    const items = await Promise.all(sessions.map(async (session) => {
+      const [reports, prescriptions, reminders] = await Promise.all([
+        db.list('health_records', { sessionId: session.sessionId }),
+        db.list('prescriptions', { sessionId: session.sessionId }),
+        db.list('reminders', { sessionId: session.sessionId }),
+      ]);
+      return { ...session, reports, prescriptions, reminders };
+    }));
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load session history.' });
+  }
+});
+
+app.get('/api/sessions/:sessionId', authRequired, async (req, res) => {
+  const result = await assertSessionAccess(req, res, req.params.sessionId, {
+    allowCompleted: true,
+    roles: ['doctor', 'hospital', 'patient', 'admin'],
+  });
+  if (!result) return;
+  const { actor, session } = result;
+  const patientOwns = actor.role === 'patient' && String(actor.patientId) === String(session.patientId);
+  if (actor.role === 'patient' && !patientOwns) return res.status(403).json({ error: 'This session does not belong to you.' });
+  const [reports, prescriptions, reminders] = await Promise.all([
+    db.list('health_records', { sessionId: session.sessionId }),
+    db.list('prescriptions', { sessionId: session.sessionId }),
+    db.list('reminders', { sessionId: session.sessionId }),
+  ]);
+  res.json({ item: session, reports, prescriptions, reminders });
+});
+
+app.post('/api/sessions/:sessionId/reports', authRequired, async (req, res) => {
+  const result = await assertSessionAccess(req, res, req.params.sessionId);
+  if (!result) return;
+  const { actor, session } = result;
+  const body = req.body || {};
+  const method = body.method || (body.file ? 'file' : body.documentLink ? 'link' : 'manual');
+  if (method === 'link') {
+    try {
+      const url = new URL(body.documentLink);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid protocol');
+    } catch {
+      return res.status(400).json({ error: 'Please provide a valid http(s) report link.' });
+    }
+  }
+  if (method === 'file' && (!body.file?.name || !body.file?.data)) {
+    return res.status(400).json({ error: 'Report file name and data are required.' });
+  }
+  const report = await db.create('health_records', {
+    id: makeId('REC'),
+    patientId: session.patientId,
+    patientName: session.patientName,
+    sessionId: session.sessionId,
+    sourceCollection: session.sourceCollection,
+    hospitalId: session.hospitalId || actor.hospitalId,
+    hospitalName: session.hospitalName || actor.hospitalName,
+    doctorId: session.doctorId || actor.doctorId,
+    doctorName: session.doctorName || actor.doctorName,
+    title: body.title || body.reportType || 'Medical Report',
+    type: body.reportType || 'Clinical Report',
+    reportMethod: method,
+    reportInformation: body.reportInformation || body.manualEntry || '',
+    documentLink: method === 'link' ? body.documentLink : '',
+    file: method === 'file' ? body.file.name : body.fileName || '',
+    fileMeta: method === 'file' ? { name: body.file.name, type: body.file.type, size: body.file.size } : undefined,
+    fileData: method === 'file' ? body.file.data : undefined,
+    facility: session.hospitalName || actor.hospitalName || 'Ayudh Vikas Network',
+    doctor: session.doctorName || actor.doctorName || '',
+    date: formatDateTime(),
+    status: body.status || 'Submitted',
+    uploadedBy: actor.user.id,
+    uploadedByRole: actor.role,
+  });
+  res.status(201).json({ item: report });
+});
+
+app.post('/api/sessions/:sessionId/prescriptions', authRequired, async (req, res) => {
+  const result = await assertSessionAccess(req, res, req.params.sessionId);
+  if (!result) return;
+  const { actor, session } = result;
+  const body = req.body || {};
+  const medicines = Array.isArray(body.medicines) ? body.medicines : [];
+  if (!medicines.length && !body.instructions) {
+    return res.status(400).json({ error: 'Add at least one medicine or prescription instruction.' });
+  }
+  const prescription = await db.create('prescriptions', {
+    id: makeId('RX'),
+    patientId: session.patientId,
+    patientName: session.patientName,
+    sessionId: session.sessionId,
+    sourceCollection: session.sourceCollection,
+    hospitalId: session.hospitalId || actor.hospitalId,
+    hospitalName: session.hospitalName || actor.hospitalName,
+    doctorId: session.doctorId || actor.doctorId,
+    doctorName: session.doctorName || actor.doctorName,
+    prescriptionDate: formatDateTime(),
+    medicines,
+    instructions: body.instructions || '',
+    followUpDate: body.followUpDate || '',
+    status: 'Active',
+    createdBy: actor.user.id,
+    createdByRole: actor.role,
+  });
+  const reminders = await createPrescriptionReminders(prescription, actor, session);
+  res.status(201).json({ item: prescription, reminders });
+});
+
+app.post('/api/sessions/:sessionId/reminders', authRequired, async (req, res) => {
+  const result = await assertSessionAccess(req, res, req.params.sessionId);
+  if (!result) return;
+  const { actor, session } = result;
+  const body = req.body || {};
+  if (!body.title) return res.status(400).json({ error: 'Reminder title is required.' });
+  const reminder = await db.create('reminders', {
+    id: makeId('REM'),
+    patientId: session.patientId,
+    patientName: session.patientName,
+    sessionId: session.sessionId,
+    sourceCollection: session.sourceCollection,
+    hospitalId: session.hospitalId || actor.hospitalId,
+    hospitalName: session.hospitalName || actor.hospitalName,
+    doctorId: session.doctorId || actor.doctorId,
+    doctorName: session.doctorName || actor.doctorName,
+    title: body.title,
+    description: body.description || body.instructions || '',
+    time: body.time || body.dateTime || '',
+    recurrence: body.recurrence || '',
+    type: body.type || body.category || 'Health Reminder',
+    category: body.category || 'Health Reminder',
+    mandatory: Boolean(body.mandatory),
+    enabled: body.enabled !== false,
+    autoGenerated: false,
+    sourceType: 'manual',
+    status: body.status || 'Active',
+    createdBy: actor.user.id,
+    createdByRole: actor.role,
+  });
+  res.status(201).json({ item: reminder });
+});
+
+app.patch('/api/reminders/:reminderId', authRequired, async (req, res) => {
+  const actor = await getActor(req);
+  const reminder = await db.get('reminders', req.params.reminderId);
+  if (!reminder) return res.status(404).json({ error: 'Reminder not found.' });
+  const patch = req.body || {};
+  const patientOwns = actor.role === 'patient' && String(reminder.patientId || '') === String(actor.patientId || '');
+  const creatorOwns =
+    (actor.role === 'doctor' && (String(reminder.doctorId || '') === String(actor.doctorId || '') || reminder.createdBy === actor.user.id)) ||
+    (actor.role === 'hospital' && (String(reminder.hospitalId || '') === String(actor.hospitalId || '') || reminder.createdBy === actor.user.id));
+  if (!patientOwns && !creatorOwns && actor.role !== 'admin') {
+    return res.status(403).json({ error: 'You are not allowed to update this reminder.' });
+  }
+  if (patientOwns && reminder.mandatory && patch.enabled === false) {
+    return res.status(403).json({ error: 'This reminder is mandatory and can only be changed by the medical team.' });
+  }
+  if (patientOwns) {
+    const item = await db.update('reminders', reminder.id, { enabled: patch.enabled !== false });
+    return res.json({ item });
+  }
+  const item = await db.update('reminders', reminder.id, patch);
+  res.json({ item });
+});
+
+app.post('/api/sessions/:sessionId/finish', authRequired, async (req, res) => {
+  const result = await assertSessionAccess(req, res, req.params.sessionId);
+  if (!result) return;
+  const { actor, session } = result;
+  const completedAt = formatDateTime();
+  const item = await db.update(session.sourceCollection, session.id, {
+    status: 'Completed',
+    sessionStatus: 'COMPLETED',
+    completedAt,
+    completedBy: actor.user.id,
+    completedByRole: actor.role,
+    visitPassStatus: 'EXPIRED',
+    visitPassExpiredAt: completedAt,
+    historyRecorded: true,
+  });
+  res.json({ item: normalizeSession(item, session.sourceCollection) });
+});
+
+app.get('/api/patient/medical-feed', authRequired, async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    if (actor.role !== 'patient') return res.status(403).json({ error: 'Patient access is required.' });
+    const patientId = actor.patientId;
+    const [reports, prescriptions, reminders, visits, appointments] = await Promise.all([
+      db.list('health_records', { patientId }),
+      db.list('prescriptions', { patientId }),
+      db.list('reminders', { patientId }),
+      db.list('visit_requests', { patientId }),
+      db.list('appointments', { patientId }),
+    ]);
+    res.json({
+      reports,
+      prescriptions,
+      reminders,
+      sessions: [
+        ...visits.map((item) => normalizeSession(item, 'visit_requests')),
+        ...appointments.map((item) => normalizeSession(item, 'appointments')),
+      ],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load patient medical data.' });
+  }
 });
 
 app.get('/api/users', adminRequired, async (req, res) => {
@@ -911,12 +1515,17 @@ app.get('/api/records/:collection', async (req, res) => {
   if (!publicRead && !req.user) return res.status(401).json({ error: 'Authentication required' });
 
   const { page, limit, ...filter } = req.query;
-  let roleFilter = { ...filter };
-  if (req.user) {
-    roleFilter = applyRoleBasedFilters(collection, filter, userRolesOf(req.user), req.user.id, userData(req.user));
+  let items;
+  if (SENSITIVE_COLLECTIONS.has(collection)) {
+    const actor = await getActor(req);
+    items = await scopedSensitiveList(actor, collection, filter);
+  } else {
+    let roleFilter = { ...filter };
+    if (req.user) {
+      roleFilter = applyRoleBasedFilters(collection, filter, userRolesOf(req.user), req.user.id, userData(req.user));
+    }
+    items = await db.list(collection, roleFilter);
   }
-
-  let items = await db.list(collection, roleFilter);
 
   if (collection === 'doctors' && !userHasRole(req.user, 'admin')) {
     items = items.filter(isVerifiedProvider);
@@ -946,7 +1555,13 @@ app.get('/api/records/:collection/:id', async (req, res) => {
   if (!publicRead && !req.user) return res.status(401).json({ error: 'Authentication required' });
   const item = await db.get(collection, id);
   if (!item) return res.status(404).json({ error: 'Not found' });
-  if (!publicRead && !canModifyRecord(req.user, collection, item) && !userHasRole(req.user, ['doctor', 'hospital', 'marketing', 'admin'])) {
+  if (SENSITIVE_COLLECTIONS.has(collection)) {
+    const actor = await getActor(req);
+    const visible = await scopedSensitiveList(actor, collection, {});
+    if (!visible.some((record) => record.id === item.id)) {
+      return res.status(403).json({ error: 'You are not allowed to view this medical record.' });
+    }
+  } else if (!publicRead && !canModifyRecord(req.user, collection, item) && !userHasRole(req.user, ['doctor', 'hospital', 'marketing', 'admin'])) {
     return res.status(403).json({ error: 'Cannot access this record' });
   }
   res.json({ item });
@@ -1050,6 +1665,12 @@ app.post('/api/records/:collection', async (req, res) => {
   if (collection === 'appointments' && !payload.tokenNumber) {
     payload.tokenNumber = `TK-${Math.floor(10 + Math.random() * 90)}`;
   }
+  if (['visit_requests', 'appointments'].includes(collection) && isAuthorizedStatus(payload.status)) {
+    payload.authorizedAt = payload.authorizedAt || formatDateTime();
+    payload.sessionStatus = payload.sessionStatus || 'ACTIVE';
+    payload.visitPassStatus = payload.visitPassStatus || 'ACTIVE';
+    payload.tokenNumber = payload.tokenNumber || `TK-${Math.floor(10 + Math.random() * 90)}`;
+  }
   if (collection === 'ambulance_bookings') {
     payload.driverName = payload.driverName || 'Suresh Varma (Paramedic Driver)';
     payload.driverContact = payload.driverContact || '9000045073';
@@ -1060,6 +1681,13 @@ app.post('/api/records/:collection', async (req, res) => {
     const last = txs[0]?.balanceAfter ?? 0;
     const amount = Number(payload.amount || 0);
     payload.balanceAfter = last + amount;
+  }
+
+  if (SENSITIVE_COLLECTIONS.has(collection)) {
+    const actor = await getActor(req);
+    if (!canMutateSensitiveCollection(actor, collection, payload)) {
+      return res.status(403).json({ error: 'Use the authorized session workflow for medical records.' });
+    }
   }
 
   if (collection === 'hospital_beds' && Array.isArray(req.body?.beds)) {
@@ -1126,12 +1754,24 @@ app.post('/api/records/:collection', async (req, res) => {
 app.patch('/api/records/:collection/:id', authRequired, async (req, res) => {
   const { collection, id } = req.params;
   if (!assertCollection(collection)) return res.status(404).json({ error: 'Unknown collection' });
-  const record = await db.get(collection, id);
-  if (!record) return res.status(404).json({ error: 'Not found' });
-  if (!canModifyRecord(req.user, collection, record)) {
+  const patch = { ...(req.body || {}) };
+  if (['visit_requests', 'appointments'].includes(collection) && isAuthorizedStatus(patch.status)) {
+    patch.authorizedAt = patch.authorizedAt || formatDateTime();
+    patch.sessionStatus = patch.sessionStatus || 'ACTIVE';
+    patch.visitPassStatus = patch.visitPassStatus || 'ACTIVE';
+    patch.tokenNumber = patch.tokenNumber || `TK-${Math.floor(10 + Math.random() * 90)}`;
+  }
+  const existing = await db.get(collection, id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (SENSITIVE_COLLECTIONS.has(collection)) {
+    const actor = await getActor(req);
+    if (!canMutateSensitiveCollection(actor, collection, patch, existing)) {
+      return res.status(403).json({ error: 'You are not allowed to update this medical record.' });
+    }
+  } else if (!canModifyRecord(req.user, collection, existing)) {
     return res.status(403).json({ error: 'Cannot modify this record' });
   }
-  const item = await db.update(collection, id, req.body || {});
+  const item = await db.update(collection, id, patch);
   if (collection === 'doctors' && item.hospitalId) {
     const hospital = await db.get('hospitals', item.hospitalId);
     if (hospital) {
@@ -1147,9 +1787,14 @@ app.patch('/api/records/:collection/:id', authRequired, async (req, res) => {
 app.delete('/api/records/:collection/:id', authRequired, async (req, res) => {
   const { collection, id } = req.params;
   if (!assertCollection(collection)) return res.status(404).json({ error: 'Unknown collection' });
-  const record = await db.get(collection, id);
-  if (!record) return res.status(404).json({ error: 'Not found' });
-  if (!canModifyRecord(req.user, collection, record)) {
+  const existing = await db.get(collection, id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (SENSITIVE_COLLECTIONS.has(collection)) {
+    const actor = await getActor(req);
+    if (!canMutateSensitiveCollection(actor, collection, {}, existing)) {
+      return res.status(403).json({ error: 'You are not allowed to delete this medical record.' });
+    }
+  } else if (!canModifyRecord(req.user, collection, existing)) {
     return res.status(403).json({ error: 'Cannot delete this record' });
   }
   const item = await db.remove(collection, id);

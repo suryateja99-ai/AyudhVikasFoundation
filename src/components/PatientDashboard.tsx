@@ -58,6 +58,7 @@ import { HospitalSearchVisitSection } from './HospitalSearchVisitSection';
 import { Home } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
+import { api } from '../lib/api';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { EmptyState } from './EmptyState';
 import { LiveStatusBadge } from './LiveStatusBadge';
@@ -116,12 +117,16 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   });
 
   // Reminders state
-  const [reminders, setReminders] = useState([
+  const [reminders, setReminders] = useState<any[]>([
     { id: 1, title: 'Take Metformin 500mg', time: '08:00 AM (After Breakfast)', type: 'Medication', enabled: true },
     { id: 2, title: 'Blood Pressure Log', time: '02:00 PM (Daily)', type: 'Health Log', enabled: true },
     { id: 3, title: 'Evening Brisk Walk (30 mins)', time: '06:00 PM (Daily)', type: 'Exercise', enabled: true },
     { id: 4, title: 'Take Telmisartan 40mg', time: '09:00 PM (After Dinner)', type: 'Medication', enabled: true }
   ]);
+  const [medicalLoading, setMedicalLoading] = useState(false);
+  const [medicalError, setMedicalError] = useState('');
+  const [prescriptionsList, setPrescriptionsList] = useState<any[]>([]);
+  const [patientSessions, setPatientSessions] = useState<any[]>([]);
   const [newReminderModal, setNewReminderModal] = useState(false);
   const [newReminderTitle, setNewReminderTitle] = useState('');
   const [newReminderTime, setNewReminderTime] = useState('');
@@ -153,7 +158,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   const [recordDoctor, setRecordDoctor] = useState('Dr. Prashanth Reddy');
 
   // Records list
-  const [recordsList, setRecordsList] = useState([
+  const [recordsList, setRecordsList] = useState<any[]>([
     { id: 1, title: 'Cardiology Consultation Rx & Diet Plan', doctor: 'Dr. Prashanth Reddy', facility: 'CARE Hospitals Warangal', date: '28 Apr 2025', type: 'Prescription', file: 'Rx_Cardiology_28Apr2025.pdf', size: '1.2 MB' },
     { id: 2, title: 'Complete Blood Count (CBC) Diagnostic Report', doctor: 'Dr. S. K. Roy (Pathologist)', facility: 'Vijaya Diagnostic Centre', date: '20 May 2025', type: 'Lab Report', file: 'CBC_Report_AVP100245.pdf', size: '2.4 MB' },
     { id: 3, title: 'Lipid Profile & Liver Function Test (LFT)', doctor: 'Dr. Anusha Reddy', facility: 'Lucid Medical Diagnostics', date: '15 Apr 2025', type: 'Lab Report', file: 'Lipid_LFT_15Apr2025.pdf', size: '3.1 MB' },
@@ -200,12 +205,34 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   useEffect(() => {
     const pid = user?.patientId || profileData.patientId;
     const mine = (list: any[]) => list.filter((item) => !pid || item.patientId === pid || !item.patientId);
-    if (collections.reminders.length) setReminders(mine(collections.reminders));
     if (collections.tickets.length) setTicketsList(mine(collections.tickets));
-    if (collections.health_records.length) setRecordsList(mine(collections.health_records));
     const txs = mine(collections.wallet_txns);
     if (txs[0]?.balanceAfter !== undefined) setWalletBalance(txs[0].balanceAfter);
   }, [collections, user, profileData.patientId]);
+
+  useEffect(() => {
+    if (!user || isGuest) return;
+    let cancelled = false;
+    setMedicalLoading(true);
+    setMedicalError('');
+    api.patientMedicalFeed()
+      .then((feed) => {
+        if (cancelled) return;
+        setReminders(feed.reminders || []);
+        setRecordsList(feed.reports || []);
+        setPrescriptionsList(feed.prescriptions || []);
+        setPatientSessions(feed.sessions || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setMedicalError(err.message || 'Unable to load medical records.');
+      })
+      .finally(() => {
+        if (!cancelled) setMedicalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isGuest]);
 
   const sidebarMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -231,6 +258,23 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const reportRows = recordsList.length
+    ? recordsList.map((rep: any) => ({
+        ...rep,
+        test: rep.title || rep.type || 'Medical Report',
+        lab: `${rep.hospitalName || rep.facility || 'Ayudh Vikas Network'}${rep.doctorName || rep.doctor ? ` - ${rep.doctorName || rep.doctor}` : ''}`,
+        date: String(rep.date || rep.createdAt || '').slice(0, 10) || 'Today',
+        status: rep.status || 'Available',
+        pdf: rep.file || rep.documentLink || rep.title || 'Medical Report',
+        reportInformation: rep.reportInformation || rep.manualEntry || '',
+        reportMethod: rep.reportMethod || (rep.file ? 'file' : rep.documentLink ? 'link' : 'manual'),
+        documentLink: rep.documentLink || '',
+        file: rep.file || '',
+      }))
+    : [];
+
+  const prescriptionRows = prescriptionsList.length ? prescriptionsList : [];
+
   const handleSidebarClick = (id: string) => {
     setActiveSidebarTab(id);
     if (onTabChange) onTabChange(id);
@@ -249,9 +293,21 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     showToast('Profile updated successfully!');
   };
 
-  const handleToggleReminder = (id: number) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
-    showToast('Reminder status updated!');
+  const handleToggleReminder = async (id: any) => {
+    const reminder = reminders.find((r: any) => r.id === id);
+    if (!reminder) return;
+    if (reminder.mandatory && reminder.enabled) {
+      showToast('This reminder is mandatory and locked by your medical team.');
+      return;
+    }
+    const nextEnabled = !reminder.enabled;
+    try {
+      const res = await api.updateReminder(String(id), { enabled: nextEnabled });
+      setReminders(prev => prev.map((r: any) => r.id === id ? res.item : r));
+      showToast('Reminder status updated!');
+    } catch (err: any) {
+      showToast(err.message || 'Unable to update reminder.');
+    }
   };
 
   const handleAddReminder = (e: React.FormEvent) => {
@@ -654,7 +710,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             </div>
           )}
 
-          {/* TAB 3: DOCTOR APPOINTMENTS VIEW */}
+          {/* TAB 3: BOOK DOCTOR VIEW */}
           {activeSidebarTab === 'appointments' && (
             <div className="p-0 animate-fadeIn">
               <BookAppointmentPage 
@@ -945,12 +1001,13 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               <div className="space-y-3">
-                {[
-                  { test: 'Complete Blood Count (CBC)', lab: 'Vijaya Diagnostic Centre, Hanamkonda', date: '20 May 2025', status: 'Normal', pdf: 'CBC_Report_20May.pdf' },
-                  { test: 'Lipid Profile (Cholesterol, HDL, LDL, Triglycerides)', lab: 'Lucid Medical Diagnostics, Warangal', date: '15 Apr 2025', status: 'Borderline', pdf: 'Lipid_15Apr.pdf' },
-                  { test: 'Liver Function Test (LFT & Bilirubin)', lab: 'CARE Hospital Diagnostics', date: '10 Jan 2025', status: 'Normal', pdf: 'LFT_10Jan.pdf' },
-                  { test: 'Thyroid Profile (Total T3, T4, Ultrasensitive TSH)', lab: 'Tenet Diagnostics, Warangal', date: '10 Jan 2025', status: 'Normal', pdf: 'Thyroid_10Jan.pdf' }
-                ].map((rep, idx) => (
+                {medicalLoading && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-xs font-bold text-slate-500">Loading reports...</div>
+                )}
+                {!medicalLoading && reportRows.length === 0 && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-xs font-bold text-slate-500">No reports uploaded yet.</div>
+                )}
+                {reportRows.map((rep, idx) => (
                   <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -962,23 +1019,35 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 font-semibold mt-0.5">{rep.lab} • Reported on {rep.date}</p>
+                      {rep.reportInformation && (
+                        <p className="text-[11px] text-slate-700 font-semibold mt-1 leading-relaxed">{rep.reportInformation}</p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <button 
-                        onClick={() => showToast(`Opening ${rep.pdf}...`)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>View</span>
-                      </button>
-                      <button 
-                        onClick={() => showToast(`Downloaded ${rep.pdf} successfully!`)}
-                        className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download PDF</span>
-                      </button>
+                      {rep.reportMethod === 'link' && rep.documentLink && (
+                        <button
+                          onClick={() => window.open(rep.documentLink, '_blank', 'noopener,noreferrer')}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open Report URL</span>
+                        </button>
+                      )}
+                      {rep.reportMethod === 'file' && rep.file && (
+                        <button
+                          onClick={() => showToast(`${rep.file} is available in your secured medical record.`)}
+                          className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download PDF</span>
+                        </button>
+                      )}
+                      {rep.reportMethod === 'manual' && (
+                        <span className="bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-lg">
+                          Manual Entry
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -995,6 +1064,41 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               <div className="space-y-4">
+                {medicalLoading && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs font-bold text-slate-500">Loading prescriptions...</div>
+                )}
+                {!medicalLoading && prescriptionRows.length === 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs font-bold text-slate-500">No prescriptions issued yet.</div>
+                )}
+                {prescriptionRows.map((rx: any) => (
+                  <div key={rx.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900">{rx.doctorName || 'Medical Team'}</h3>
+                        <p className="text-[10px] text-slate-500 font-semibold">{rx.hospitalName || 'Ayudh Vikas Network'} - Issued: {String(rx.prescriptionDate || rx.createdAt || '').slice(0, 10) || 'Today'}</p>
+                      </div>
+                      <button
+                        onClick={() => showToast('Medicine refill request dispatched to Ayudh Vikas partner pharmacy!')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Pill className="w-3.5 h-3.5" />
+                        <span>Order Refill (20% Off)</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {(rx.medicines || []).map((med: any, index: number) => (
+                        <div key={`${rx.id}-${index}`} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="font-black text-slate-900">{med.medicine || med.name}</div>
+                          <div className="text-[11px] text-slate-600 mt-0.5">Dosage: {med.dosage || '-'} - {med.frequency || 'As directed'} - {med.duration || ''}</div>
+                          <div className="text-[10px] text-emerald-700 font-bold mt-1">Instructions: {med.instructions || rx.instructions || 'Follow doctor advice'}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {rx.instructions && <p className="text-xs text-slate-600 font-semibold">{rx.instructions}</p>}
+                  </div>
+                ))}
+                {false && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div>
@@ -1023,6 +1127,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1092,12 +1197,16 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       <div>
                         <h4 className="text-xs font-black text-slate-900">{rem.title}</h4>
                         <p className="text-[11px] text-slate-500 font-semibold">{rem.time}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          {rem.doctorName || rem.hospitalName || 'Self'}{rem.mandatory ? ' - Mandatory' : ' - Optional'}
+                        </p>
                       </div>
                     </div>
 
                     <button
                       onClick={() => handleToggleReminder(rem.id)}
-                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${rem.enabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                      title={rem.mandatory ? 'Mandatory reminder locked by your medical team' : 'Toggle reminder'}
+                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${rem.enabled ? 'bg-emerald-600' : 'bg-slate-300'} ${rem.mandatory ? 'ring-2 ring-amber-300 cursor-not-allowed' : ''}`}
                     >
                       <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${rem.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
@@ -1684,7 +1793,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                         </h3>
                       </div>
                       <button 
-                        onClick={() => handleSidebarClick('appointments')}
+                        onClick={() => handleSidebarClick('find_hospitals')}
                         className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
                       >
                         View All
