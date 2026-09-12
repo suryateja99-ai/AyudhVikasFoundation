@@ -106,7 +106,7 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (name === 'hospitals') return [name, boot.hospitals] as const;
           if (name === 'doctors') return [name, boot.doctors] as const;
           if (name === 'health_camps') return [name, boot.health_camps] as const;
-          const res = await api.list(name);
+          const res = await api.list(name).catch(() => ({ items: [] }));
           return [name, res.items] as const;
         })
       );

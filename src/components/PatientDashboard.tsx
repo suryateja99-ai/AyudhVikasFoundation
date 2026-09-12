@@ -58,6 +58,7 @@ import { HospitalSearchVisitSection } from './HospitalSearchVisitSection';
 import { Home } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
+import { api } from '../lib/api';
 
 interface PatientDashboardProps {
   onLogout: () => void;
@@ -85,7 +86,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   onRequireRegister
 }) => {
   const { user, updateProfile, isGuest } = useAuth();
-  const { collections, create } = useLiveData();
+  const { collections, create, loading: liveLoading } = useLiveData();
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>(activeTab || initialTab || 'dashboard');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
@@ -110,12 +111,16 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   });
 
   // Reminders state
-  const [reminders, setReminders] = useState([
+  const [reminders, setReminders] = useState<any[]>([
     { id: 1, title: 'Take Metformin 500mg', time: '08:00 AM (After Breakfast)', type: 'Medication', enabled: true },
     { id: 2, title: 'Blood Pressure Log', time: '02:00 PM (Daily)', type: 'Health Log', enabled: true },
     { id: 3, title: 'Evening Brisk Walk (30 mins)', time: '06:00 PM (Daily)', type: 'Exercise', enabled: true },
     { id: 4, title: 'Take Telmisartan 40mg', time: '09:00 PM (After Dinner)', type: 'Medication', enabled: true }
   ]);
+  const [medicalLoading, setMedicalLoading] = useState(false);
+  const [medicalError, setMedicalError] = useState('');
+  const [prescriptionsList, setPrescriptionsList] = useState<any[]>([]);
+  const [patientSessions, setPatientSessions] = useState<any[]>([]);
   const [newReminderModal, setNewReminderModal] = useState(false);
   const [newReminderTitle, setNewReminderTitle] = useState('');
   const [newReminderTime, setNewReminderTime] = useState('');
@@ -147,7 +152,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   const [recordDoctor, setRecordDoctor] = useState('Dr. Prashanth Reddy');
 
   // Records list
-  const [recordsList, setRecordsList] = useState([
+  const [recordsList, setRecordsList] = useState<any[]>([
     { id: 1, title: 'Cardiology Consultation Rx & Diet Plan', doctor: 'Dr. Prashanth Reddy', facility: 'CARE Hospitals Warangal', date: '28 Apr 2025', type: 'Prescription', file: 'Rx_Cardiology_28Apr2025.pdf', size: '1.2 MB' },
     { id: 2, title: 'Complete Blood Count (CBC) Diagnostic Report', doctor: 'Dr. S. K. Roy (Pathologist)', facility: 'Vijaya Diagnostic Centre', date: '20 May 2025', type: 'Lab Report', file: 'CBC_Report_AVP100245.pdf', size: '2.4 MB' },
     { id: 3, title: 'Lipid Profile & Liver Function Test (LFT)', doctor: 'Dr. Anusha Reddy', facility: 'Lucid Medical Diagnostics', date: '15 Apr 2025', type: 'Lab Report', file: 'Lipid_LFT_15Apr2025.pdf', size: '3.1 MB' },
@@ -194,18 +199,58 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   useEffect(() => {
     const pid = user?.patientId || profileData.patientId;
     const mine = (list: any[]) => list.filter((item) => !pid || item.patientId === pid || !item.patientId);
-    if (collections.reminders.length) setReminders(mine(collections.reminders));
     if (collections.tickets.length) setTicketsList(mine(collections.tickets));
-    if (collections.health_records.length) setRecordsList(mine(collections.health_records));
     const txs = mine(collections.wallet_txns);
     if (txs[0]?.balanceAfter !== undefined) setWalletBalance(txs[0].balanceAfter);
   }, [collections, user, profileData.patientId]);
+
+  useEffect(() => {
+    if (!user || isGuest) return;
+    let cancelled = false;
+    setMedicalLoading(true);
+    setMedicalError('');
+    api.patientMedicalFeed()
+      .then((feed) => {
+        if (cancelled) return;
+        setReminders(feed.reminders || []);
+        setRecordsList(feed.reports || []);
+        setPrescriptionsList(feed.prescriptions || []);
+        setPatientSessions(feed.sessions || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setMedicalError(err.message || 'Unable to load medical records.');
+      })
+      .finally(() => {
+        if (!cancelled) setMedicalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isGuest]);
+
+  const currentPatientId = String(user?.patientId || profileData.patientId || '').trim();
+  const currentPatientPhone = String(user?.phone || profileData.phone || '').trim();
+  const patientAppointments = (collections.appointments || [])
+    .filter((appointment: any) => {
+      const appointmentPatientId = String(appointment.patientId || '').trim();
+      const appointmentPhone = String(appointment.phone || appointment.patientPhone || '').trim();
+      return (
+        (!!currentPatientId && appointmentPatientId === currentPatientId) ||
+        (!!currentPatientPhone && appointmentPhone === currentPatientPhone)
+      );
+    })
+    .sort((a: any, b: any) => {
+      const left = new Date(a.createdAt || a.updatedAt || a.appointmentDate || 0).getTime() || 0;
+      const right = new Date(b.createdAt || b.updatedAt || b.appointmentDate || 0).getTime() || 0;
+      return right - left;
+    });
 
   const sidebarMenuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'find_hospitals', label: 'Find Nearby Hospitals', icon: Building2, highlight: true },
-    { id: 'appointments', label: 'My Appointments', icon: Calendar },
+    { id: 'book_doctor', label: 'Book Doctor', icon: Calendar },
+    { id: 'appointments', label: 'My Appointment', icon: Calendar },
     { id: 'lab_tests', label: 'Book Lab Tests', icon: TestTube, highlight: true },
     { id: 'ambulance_booking', label: 'Ambulance Booking', icon: Ambulance, highlight: true },
     { id: 'home_service', label: 'Home Service', icon: Home, highlight: true },
@@ -223,6 +268,23 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     { id: 'downloads', label: 'Downloads', icon: Download },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const reportRows = recordsList.length
+    ? recordsList.map((rep: any) => ({
+        ...rep,
+        test: rep.title || rep.type || 'Medical Report',
+        lab: `${rep.hospitalName || rep.facility || 'Ayudh Vikas Network'}${rep.doctorName || rep.doctor ? ` - ${rep.doctorName || rep.doctor}` : ''}`,
+        date: String(rep.date || rep.createdAt || '').slice(0, 10) || 'Today',
+        status: rep.status || 'Available',
+        pdf: rep.file || rep.documentLink || rep.title || 'Medical Report',
+        reportInformation: rep.reportInformation || rep.manualEntry || '',
+        reportMethod: rep.reportMethod || (rep.file ? 'file' : rep.documentLink ? 'link' : 'manual'),
+        documentLink: rep.documentLink || '',
+        file: rep.file || '',
+      }))
+    : [];
+
+  const prescriptionRows = prescriptionsList.length ? prescriptionsList : [];
 
   const handleSidebarClick = (id: string) => {
     setActiveSidebarTab(id);
@@ -242,9 +304,21 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
     showToast('Profile updated successfully!');
   };
 
-  const handleToggleReminder = (id: number) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
-    showToast('Reminder status updated!');
+  const handleToggleReminder = async (id: any) => {
+    const reminder = reminders.find((r: any) => r.id === id);
+    if (!reminder) return;
+    if (reminder.mandatory && reminder.enabled) {
+      showToast('This reminder is mandatory and locked by your medical team.');
+      return;
+    }
+    const nextEnabled = !reminder.enabled;
+    try {
+      const res = await api.updateReminder(String(id), { enabled: nextEnabled });
+      setReminders(prev => prev.map((r: any) => r.id === id ? res.item : r));
+      showToast('Reminder status updated!');
+    } catch (err: any) {
+      showToast(err.message || 'Unable to update reminder.');
+    }
   };
 
   const handleAddReminder = (e: React.FormEvent) => {
@@ -635,8 +709,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             </div>
           )}
 
-          {/* TAB 3: DOCTOR APPOINTMENTS VIEW */}
-          {activeSidebarTab === 'appointments' && (
+          {/* TAB 3: BOOK DOCTOR VIEW */}
+          {activeSidebarTab === 'book_doctor' && (
             <div className="p-0 animate-fadeIn">
               <BookAppointmentPage 
                 hideHeader={true}
@@ -648,6 +722,128 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 onNavigateDashboard={() => handleSidebarClick('dashboard')}
                 onLogout={onLogout}
               />
+            </div>
+          )}
+
+          {/* TAB 3A: MY APPOINTMENT VIEW */}
+          {activeSidebarTab === 'appointments' && (
+            <div className="p-3 sm:p-5 lg:p-6 space-y-5 animate-fadeIn">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-black text-[#0f2e5a]">My Appointment</h2>
+                  <p className="text-xs text-slate-500 font-semibold mt-1">
+                    Track your doctor appointments, visit tokens and current appointment status.
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleSidebarClick('book_doctor')}
+                  className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Book Doctor</span>
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                      <CalendarDays className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[#0f2e5a]">Appointment Records</h3>
+                      <p className="text-[11px] text-slate-500 font-semibold">
+                        {patientAppointments.length} appointment{patientAppointments.length === 1 ? '' : 's'} found
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {liveLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="w-10 h-10 mx-auto rounded-full border-4 border-emerald-100 border-t-emerald-700 animate-spin" />
+                    <p className="text-xs font-bold text-slate-500 mt-3">Loading appointments...</p>
+                  </div>
+                ) : patientAppointments.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center mb-3">
+                      <Calendar className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-black text-slate-900">No appointments yet</h3>
+                    <p className="text-xs text-slate-500 font-semibold mt-1">
+                      Book a doctor consultation to see your appointment status here.
+                    </p>
+                    <button
+                      onClick={() => handleSidebarClick('book_doctor')}
+                      className="mt-4 bg-[#0f2e5a] hover:bg-[#0a2244] text-white text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      Book Doctor
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {patientAppointments.map((appointment: any) => {
+                      const status = appointment.status || 'Pending';
+                      const isApproved = ['approved', 'confirmed', 'completed', 'arrived'].includes(String(status).toLowerCase());
+                      return (
+                        <div key={appointment.id || appointment.tokenNumber} className="p-4 sm:p-5 hover:bg-slate-50/70 transition-colors">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100 shrink-0">
+                                <UserCheck className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="text-sm font-black text-slate-900 truncate">
+                                    {appointment.doctorName || 'Doctor Consultation'}
+                                  </h4>
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                                    isApproved
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                                  }`}>
+                                    {status}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 font-semibold mt-0.5">
+                                  {appointment.speciality || appointment.visitType || 'Consultation'}
+                                </p>
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                  {appointment.hospital || appointment.hospitalName || 'Ayudh Vikas Health Care Network'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                <span className="block text-[9px] font-black text-slate-400 uppercase">Date</span>
+                                <span className="font-black text-[#0f2e5a]">{appointment.appointmentDate || appointment.date || 'Scheduled soon'}</span>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                <span className="block text-[9px] font-black text-slate-400 uppercase">Time</span>
+                                <span className="font-black text-[#0f2e5a]">{appointment.appointmentTime || appointment.time || 'TBA'}</span>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                <span className="block text-[9px] font-black text-slate-400 uppercase">Token</span>
+                                <span className="font-black text-[#0f2e5a]">{appointment.tokenNumber || appointment.visitPassToken || '-'}</span>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                <span className="block text-[9px] font-black text-slate-400 uppercase">Mode</span>
+                                <span className="font-black text-[#0f2e5a]">{appointment.consultationType || 'In person'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          {appointment.reason && (
+                            <p className="mt-3 text-xs text-slate-600 font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                              {appointment.reason}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -922,12 +1118,13 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               <div className="space-y-3">
-                {[
-                  { test: 'Complete Blood Count (CBC)', lab: 'Vijaya Diagnostic Centre, Hanamkonda', date: '20 May 2025', status: 'Normal', pdf: 'CBC_Report_20May.pdf' },
-                  { test: 'Lipid Profile (Cholesterol, HDL, LDL, Triglycerides)', lab: 'Lucid Medical Diagnostics, Warangal', date: '15 Apr 2025', status: 'Borderline', pdf: 'Lipid_15Apr.pdf' },
-                  { test: 'Liver Function Test (LFT & Bilirubin)', lab: 'CARE Hospital Diagnostics', date: '10 Jan 2025', status: 'Normal', pdf: 'LFT_10Jan.pdf' },
-                  { test: 'Thyroid Profile (Total T3, T4, Ultrasensitive TSH)', lab: 'Tenet Diagnostics, Warangal', date: '10 Jan 2025', status: 'Normal', pdf: 'Thyroid_10Jan.pdf' }
-                ].map((rep, idx) => (
+                {medicalLoading && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-xs font-bold text-slate-500">Loading reports...</div>
+                )}
+                {!medicalLoading && reportRows.length === 0 && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-xs font-bold text-slate-500">No reports uploaded yet.</div>
+                )}
+                {reportRows.map((rep, idx) => (
                   <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -939,23 +1136,35 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 font-semibold mt-0.5">{rep.lab} • Reported on {rep.date}</p>
+                      {rep.reportInformation && (
+                        <p className="text-[11px] text-slate-700 font-semibold mt-1 leading-relaxed">{rep.reportInformation}</p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <button 
-                        onClick={() => showToast(`Opening ${rep.pdf}...`)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>View</span>
-                      </button>
-                      <button 
-                        onClick={() => showToast(`Downloaded ${rep.pdf} successfully!`)}
-                        className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download PDF</span>
-                      </button>
+                      {rep.reportMethod === 'link' && rep.documentLink && (
+                        <button
+                          onClick={() => window.open(rep.documentLink, '_blank', 'noopener,noreferrer')}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open Report URL</span>
+                        </button>
+                      )}
+                      {rep.reportMethod === 'file' && rep.file && (
+                        <button
+                          onClick={() => showToast(`${rep.file} is available in your secured medical record.`)}
+                          className="bg-[#00703c] hover:bg-[#005830] text-white text-xs font-black px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download PDF</span>
+                        </button>
+                      )}
+                      {rep.reportMethod === 'manual' && (
+                        <span className="bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-black px-2.5 py-1 rounded-lg">
+                          Manual Entry
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -972,6 +1181,41 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               <div className="space-y-4">
+                {medicalLoading && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs font-bold text-slate-500">Loading prescriptions...</div>
+                )}
+                {!medicalLoading && prescriptionRows.length === 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs font-bold text-slate-500">No prescriptions issued yet.</div>
+                )}
+                {prescriptionRows.map((rx: any) => (
+                  <div key={rx.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900">{rx.doctorName || 'Medical Team'}</h3>
+                        <p className="text-[10px] text-slate-500 font-semibold">{rx.hospitalName || 'Ayudh Vikas Network'} - Issued: {String(rx.prescriptionDate || rx.createdAt || '').slice(0, 10) || 'Today'}</p>
+                      </div>
+                      <button
+                        onClick={() => showToast('Medicine refill request dispatched to Ayudh Vikas partner pharmacy!')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Pill className="w-3.5 h-3.5" />
+                        <span>Order Refill (20% Off)</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {(rx.medicines || []).map((med: any, index: number) => (
+                        <div key={`${rx.id}-${index}`} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="font-black text-slate-900">{med.medicine || med.name}</div>
+                          <div className="text-[11px] text-slate-600 mt-0.5">Dosage: {med.dosage || '-'} - {med.frequency || 'As directed'} - {med.duration || ''}</div>
+                          <div className="text-[10px] text-emerald-700 font-bold mt-1">Instructions: {med.instructions || rx.instructions || 'Follow doctor advice'}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {rx.instructions && <p className="text-xs text-slate-600 font-semibold">{rx.instructions}</p>}
+                  </div>
+                ))}
+                {false && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div>
@@ -1000,6 +1244,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -1031,7 +1276,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       Add to Calendar
                     </button>
                     <button 
-                      onClick={() => handleSidebarClick('appointments')}
+                      onClick={() => handleSidebarClick('book_doctor')}
                       className="bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg cursor-pointer"
                     >
                       Reschedule
@@ -1069,12 +1314,16 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       <div>
                         <h4 className="text-xs font-black text-slate-900">{rem.title}</h4>
                         <p className="text-[11px] text-slate-500 font-semibold">{rem.time}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          {rem.doctorName || rem.hospitalName || 'Self'}{rem.mandatory ? ' - Mandatory' : ' - Optional'}
+                        </p>
                       </div>
                     </div>
 
                     <button
                       onClick={() => handleToggleReminder(rem.id)}
-                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${rem.enabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                      title={rem.mandatory ? 'Mandatory reminder locked by your medical team' : 'Toggle reminder'}
+                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${rem.enabled ? 'bg-emerald-600' : 'bg-slate-300'} ${rem.mandatory ? 'ring-2 ring-amber-300 cursor-not-allowed' : ''}`}
                     >
                       <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${rem.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
@@ -1420,7 +1669,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
 
                 {/* 2. Book Appointment */}
                 <button
-                  onClick={() => handleSidebarClick('appointments')}
+                  onClick={() => handleSidebarClick('book_doctor')}
                   className="bg-white hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-500/80 p-3 rounded-xl shadow-2xs transition-all flex flex-col items-center justify-center text-center group cursor-pointer"
                 >
                   <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-105 transition-transform mb-1.5">
@@ -1534,7 +1783,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                         </h3>
                       </div>
                       <button 
-                        onClick={() => handleSidebarClick('appointments')}
+                        onClick={() => handleSidebarClick('book_doctor')}
                         className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <span>+ Book New</span>
@@ -1628,7 +1877,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                         </h3>
                       </div>
                       <button 
-                        onClick={() => handleSidebarClick('appointments')}
+                        onClick={() => handleSidebarClick('find_hospitals')}
                         className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
                       >
                         View All
@@ -1643,7 +1892,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                           <span className="text-[9px] font-bold text-emerald-700">ICU & Emergency Available</span>
                         </div>
                         <button 
-                          onClick={() => handleSidebarClick('appointments')}
+                          onClick={() => handleSidebarClick('book_doctor')}
                           className="text-[10px] font-black text-white bg-[#00703c] px-2.5 py-1 rounded-lg cursor-pointer shrink-0"
                         >
                           Book OPD
@@ -1657,7 +1906,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                           <span className="text-[9px] font-bold text-emerald-700">Super Speciality</span>
                         </div>
                         <button 
-                          onClick={() => handleSidebarClick('appointments')}
+                          onClick={() => handleSidebarClick('book_doctor')}
                           className="text-[10px] font-black text-white bg-[#00703c] px-2.5 py-1 rounded-lg cursor-pointer shrink-0"
                         >
                           Book OPD

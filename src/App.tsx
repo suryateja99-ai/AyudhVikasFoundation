@@ -278,7 +278,7 @@ export default function App() {
         return;
       }
       if (modal === 'book_appointment') {
-        setPatientActiveTab('appointments');
+        setPatientActiveTab('book_doctor');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -476,7 +476,7 @@ export default function App() {
     if (pendingAfterRegister?.type === 'hospital_visit') {
       setPatientActiveTab('find_hospitals');
     } else {
-      setPatientActiveTab('appointments');
+      setPatientActiveTab('book_doctor');
     }
     resetPublicViews();
     setActiveModal(null);

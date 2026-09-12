@@ -93,4 +93,43 @@ export const api = {
   remove: (collection: string, id: string) =>
     request<{ ok: boolean }>(`/api/records/${collection}/${id}`, { method: 'DELETE' }),
   lookupPatient: (q: string) => request<{ item: any }>(`/api/patients/lookup?q=${encodeURIComponent(q)}`),
+  authorizedPatients: () => request<{ items: any[]; sessions: any[] }>('/api/authorized-patients'),
+  verifyPatientSession: (payload: any) =>
+    request<{ item: any; existing?: boolean }>('/api/authorized-patients/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  patientSessions: (patientId: string) =>
+    request<{ items: any[] }>(`/api/patients/${encodeURIComponent(patientId)}/sessions`),
+  session: (sessionId: string) =>
+    request<{ item: any; reports: any[]; prescriptions: any[]; reminders: any[] }>(`/api/sessions/${encodeURIComponent(sessionId)}`),
+  sessionHistory: () =>
+    request<{ items: any[] }>('/api/sessions/history'),
+  createSessionReport: (sessionId: string, payload: any) =>
+    request<{ item: any }>(`/api/sessions/${encodeURIComponent(sessionId)}/reports`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createSessionPrescription: (sessionId: string, payload: any) =>
+    request<{ item: any; reminders: any[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/prescriptions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createSessionReminder: (sessionId: string, payload: any) =>
+    request<{ item: any }>(`/api/sessions/${encodeURIComponent(sessionId)}/reminders`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateReminder: (reminderId: string, payload: any) =>
+    request<{ item: any }>(`/api/reminders/${encodeURIComponent(reminderId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  finishSession: (sessionId: string) =>
+    request<{ item: any }>(`/api/sessions/${encodeURIComponent(sessionId)}/finish`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  patientMedicalFeed: () =>
+    request<{ reports: any[]; prescriptions: any[]; reminders: any[]; sessions: any[] }>('/api/patient/medical-feed'),
 };
