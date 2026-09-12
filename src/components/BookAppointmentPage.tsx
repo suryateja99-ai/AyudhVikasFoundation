@@ -26,6 +26,7 @@ import {
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 interface BookAppointmentPageProps {
   onBackToHome: () => void;
@@ -88,6 +89,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
 }) => {
   const { collections, create } = useLiveData();
   const { user, isGuest } = useAuth();
+  const [bookingBusy, setBookingBusy] = useState(false);
   // Filter States
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
@@ -384,6 +386,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
       : 'Next available';
 
     try {
+      setBookingBusy(true);
       await create('appointments', {
         patientName: user?.name || userProfile.name,
         patientId: user?.patientId || userProfile.patientId,
@@ -403,6 +406,8 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
       });
     } catch (err) {
       console.error(err);
+    } finally {
+      setBookingBusy(false);
     }
     
     setBookingSuccessModal({
@@ -436,9 +441,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
           
           {/* Logo */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
-            <div className="w-10 h-10 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1 text-emerald-600 shadow-2xs">
-              <HeartPulse className="w-6 h-6" />
-            </div>
+            <BrandLogo className="w-10 h-10 shadow-2xs" />
             <div className="flex flex-col">
               <span className="text-base sm:text-lg font-black text-[#0f2e5a] tracking-tight uppercase leading-none">
                 AYUDH VIKAS

@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  HeartPulse, 
   Phone, 
   MessageSquare, 
   Mail, 
@@ -11,6 +10,7 @@ import {
   Share2 
 } from 'lucide-react';
 import { ActiveModal } from '../types';
+import { BrandLogo } from './BrandLogo';
 
 interface FooterProps {
   onOpenModal: (modal: ActiveModal) => void;
@@ -29,9 +29,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenModal, setActiveTab, onSig
           {/* Col 1: Foundation Info */}
           <div className="lg:col-span-2 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400">
-                <HeartPulse className="w-6 h-6" />
-              </div>
+              <BrandLogo className="w-10 h-10" />
               <div>
                 <div className="font-black text-sm text-white uppercase tracking-tight">
                   AYUDH VIKAS FOUNDATION

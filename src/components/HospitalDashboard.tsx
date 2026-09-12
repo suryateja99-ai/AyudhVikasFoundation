@@ -35,17 +35,13 @@ import { PatientVerificationSection, VerifiedAyudhPatient } from './PatientVerif
 import { ClinicalSessionPanel } from './ClinicalSessionPanel';
 import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
-
-interface HospitalDashboardProps {
-  onLogout: () => void;
-  onNavigateHome: () => void;
-  visitRequests?: HospitalVisitRequest[];
-  onUpdateVisitRequestStatus?: (
-    requestId: string,
-    newStatus: HospitalVisitRequest['status'],
-    updateData?: Partial<HospitalVisitRequest>
-  ) => void;
-}
+import { api } from '../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { HOSPITAL_NAV_PATHS } from '../lib/roleRoutes';
+import { EmptyState } from './EmptyState';
+import { LiveStatusBadge } from './LiveStatusBadge';
+import { BrandLogo } from './BrandLogo';
+import { NotificationBell } from './NotificationBell';
 
 type HospitalNav =
   | 'Dashboard'
@@ -62,7 +58,20 @@ type HospitalNav =
   | 'Messages'
   | 'Notifications'
   | 'Support'
-  | 'Settings';
+  | 'Settings'
+  | 'Beds';
+
+interface HospitalDashboardProps {
+  onLogout: () => void;
+  onNavigateHome: () => void;
+  initialNav?: HospitalNav;
+  visitRequests?: HospitalVisitRequest[];
+  onUpdateVisitRequestStatus?: (
+    requestId: string,
+    newStatus: HospitalVisitRequest['status'],
+    updateData?: Partial<HospitalVisitRequest>
+  ) => void;
+}
 
 type HospitalDoctor = Partial<Doctor & SeniorDoctor> & {
   id: string;
@@ -198,12 +207,17 @@ const Field: React.FC<{
 export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
   onLogout,
   onNavigateHome,
+  initialNav = 'Dashboard',
   visitRequests,
   onUpdateVisitRequestStatus,
 }) => {
   const { user } = useAuth();
+  const routerNavigate = useNavigate();
   const { collections, create, update, remove } = useLiveData();
-  const [activeNav, setActiveNav] = useState<HospitalNav>('Dashboard');
+  const [activeNav, setActiveNav] = useState<HospitalNav>(initialNav);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [acceptForm, setAcceptForm] = useState({ doctorId: '', bedId: '', appointmentDateTime: '', rejectionReason: '' });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [doctorSearch, setDoctorSearch] = useState('');
@@ -211,6 +225,17 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
   const [editingDoctorId, setEditingDoctorId] = useState<string | null>(null);
   const [doctorModalOpen, setDoctorModalOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialNav) setActiveNav(initialNav);
+  }, [initialNav]);
+
+  const goNav = (nav: HospitalNav) => {
+    setActiveNav(nav);
+    const path = HOSPITAL_NAV_PATHS[nav];
+    if (path) routerNavigate(path);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const liveHospitals = collections.hospitals.length ? (collections.hospitals as HospitalPartner[]) : PARTNER_HOSPITALS;
   const currentHospital = useMemo(() => {
@@ -289,10 +314,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
     window.setTimeout(() => setToast(null), 3000);
   };
 
-  const navigate = (nav: HospitalNav) => {
-    setActiveNav(nav);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const navigate = (nav: HospitalNav) => goNav(nav);
 
   const openAddDoctor = () => {
     setEditingDoctorId(null);
@@ -386,15 +408,28 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
   };
 
   const updateRequestStatus = async (request: HospitalVisitRequest, status: HospitalVisitRequest['status']) => {
-    const tokenNumber = status === 'Accepted' ? `${currentHospital.shortName}-OPD-${Math.floor(100 + Math.random() * 899)}` : request.tokenNumber;
-    const updateData = {
-      status,
-      tokenNumber,
-      acceptedAt: status === 'Accepted' ? 'Today, Just Now' : request.acceptedAt,
-      reportingRoom: request.reportingRoom || 'Ayudh Desk, Ground Floor',
-      hospitalNotes: status === 'Accepted' ? 'Visit accepted. Please report 15 minutes before the slot.' : request.hospitalNotes,
-    };
     try {
+      if (status === 'Accepted' || status === 'Scheduled') {
+        const res = await api.acceptVisitRequest(request.id, {
+          doctorId: acceptForm.doctorId || request.doctorId,
+          bedId: acceptForm.bedId,
+          appointmentDateTime: acceptForm.appointmentDateTime || `${request.preferredDate} ${request.preferredTimeSlot}`,
+        });
+        onUpdateVisitRequestStatus?.(request.id, 'Scheduled', res.item);
+        setAcceptingId(null);
+        showToast('Visit request accepted. Patient has been notified.');
+        return;
+      }
+      if (status === 'Rejected') {
+        const res = await api.rejectVisitRequest(request.id, {
+          rejectionReason: acceptForm.rejectionReason || 'Slot not available',
+        });
+        onUpdateVisitRequestStatus?.(request.id, 'Rejected', res.item);
+        setRejectingId(null);
+        showToast('Visit request rejected. Patient has been notified.');
+        return;
+      }
+      const updateData = { status };
       await update('visit_requests', request.id, updateData);
       onUpdateVisitRequestStatus?.(request.id, status, updateData);
       showToast(`Visit request ${status.toLowerCase()}.`);
@@ -418,6 +453,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
     { label: 'Patients', icon: Users, badge: 'Verify' },
     { label: 'Consultations', icon: Stethoscope },
     { label: 'Doctors Management', icon: Building2, count: hospitalDoctors.length },
+    { label: 'Beds', icon: LayoutDashboard, count: (collections.hospital_beds || []).filter((bed: any) => bed.hospitalId === currentHospital.id).length },
     { label: 'Prescriptions', icon: FileText },
     { label: 'Reports', icon: BarChart3 },
     { label: 'Earnings', icon: IndianRupee },
@@ -561,8 +597,12 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
         <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 text-xs font-black shrink-0">{pendingRequests.length} Pending</span>
       </div>
       <div className="divide-y divide-slate-100">
+        {hospitalRequests.length === 0 && (
+          <EmptyState title="No visit requests" message="Incoming patient visit requests will appear here." />
+        )}
         {hospitalRequests.map((request) => (
-          <div key={request.id} className="py-4 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr_auto] gap-3 items-center text-xs">
+          <div key={request.id} className="py-4 space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr_auto] gap-3 items-center text-xs">
             <div>
               <div className="font-black text-slate-950">{request.patientName}</div>
               <div className="text-[11px] font-semibold text-slate-500">{request.patientPhone} - {request.patientAge || '--'} Y / {request.patientGender || 'Patient'}</div>
@@ -577,16 +617,74 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
               </span>
               {request.status === 'Pending' && (
                 <>
-                  <button onClick={() => updateRequestStatus(request, 'Accepted')} className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 font-black cursor-pointer">Accept</button>
-                  <button onClick={() => updateRequestStatus(request, 'Rejected')} className="rounded-lg bg-rose-50 text-rose-700 px-3 py-1.5 font-black cursor-pointer">Reject</button>
+                  <button onClick={() => { setAcceptingId(request.id); setRejectingId(null); }} className="rounded-lg bg-emerald-600 text-white px-3 py-1.5 font-black cursor-pointer">Accept</button>
+                  <button onClick={() => { setRejectingId(request.id); setAcceptingId(null); }} className="rounded-lg bg-rose-50 text-rose-700 px-3 py-1.5 font-black cursor-pointer">Reject</button>
                 </>
               )}
             </div>
+          </div>
+          {acceptingId === request.id && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
+              <select value={acceptForm.doctorId} onChange={(e) => setAcceptForm({ ...acceptForm, doctorId: e.target.value })} className="px-2 py-2 rounded-lg border border-emerald-200 bg-white font-bold">
+                <option value="">Assign doctor</option>
+                {hospitalDoctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>{doctor.name}</option>
+                ))}
+              </select>
+              <select value={acceptForm.bedId} onChange={(e) => setAcceptForm({ ...acceptForm, bedId: e.target.value })} className="px-2 py-2 rounded-lg border border-emerald-200 bg-white font-bold">
+                <option value="">Assign bed (optional)</option>
+                {(collections.hospital_beds || []).filter((bed: any) => bed.hospitalId === currentHospital.id && bed.status === 'available').map((bed: any) => (
+                  <option key={bed.id} value={bed.id}>{bed.wardType} · {bed.bedNumber}</option>
+                ))}
+              </select>
+              <input type="datetime-local" value={acceptForm.appointmentDateTime} onChange={(e) => setAcceptForm({ ...acceptForm, appointmentDateTime: e.target.value })} className="px-2 py-2 rounded-lg border border-emerald-200 bg-white font-bold" />
+              <button onClick={() => updateRequestStatus(request, 'Accepted')} className="rounded-lg bg-emerald-700 text-white font-black cursor-pointer">Confirm Accept</button>
+            </div>
+          )}
+          {rejectingId === request.id && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 flex flex-col md:flex-row gap-2 text-xs">
+              <input value={acceptForm.rejectionReason} onChange={(e) => setAcceptForm({ ...acceptForm, rejectionReason: e.target.value })} placeholder="Reason for rejection" className="flex-1 px-2 py-2 rounded-lg border border-rose-200 bg-white font-bold" />
+              <button onClick={() => updateRequestStatus(request, 'Rejected')} className="rounded-lg bg-rose-600 text-white px-4 font-black cursor-pointer">Confirm Reject</button>
+            </div>
+          )}
           </div>
         ))}
       </div>
     </section>
   );
+
+  const renderBeds = () => {
+    const beds = (collections.hospital_beds || []).filter((bed: any) => bed.hospitalId === currentHospital.id);
+    const occupied = beds.filter((bed: any) => bed.status === 'occupied').length;
+    const available = beds.filter((bed: any) => bed.status === 'available').length;
+    const reserved = beds.filter((bed: any) => bed.status === 'reserved').length;
+    return (
+      <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-black text-slate-950">Bed Occupancy</h2>
+            <p className="text-xs font-semibold text-slate-500">Live ward-wise bed status for this hospital.</p>
+          </div>
+          <div className="text-xs font-black text-slate-700">{occupied}/{beds.length || 0} occupied · {available} available · {reserved} reserved</div>
+        </div>
+        {beds.length === 0 ? (
+          <EmptyState title="No beds configured" message="Beds will appear here after hospital setup." />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {beds.map((bed: any) => (
+              <div key={bed.id} className="rounded-lg border border-slate-200 p-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-slate-900">{bed.bedNumber}</span>
+                  <span className={`px-2 py-0.5 rounded-full font-black ${bed.status === 'available' ? 'bg-emerald-50 text-emerald-700' : bed.status === 'occupied' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>{bed.status}</span>
+                </div>
+                <div className="mt-2 font-semibold text-slate-500">{bed.wardType} · Floor {bed.floor || '—'} · Room {bed.roomNumber || '—'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
 
   const renderProfile = () => (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -604,7 +702,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
       <section className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm space-y-3">
         <h2 className="text-base font-black text-slate-950">Enabled Features</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {['Ayudh Cashless Desk', 'Visit Requests', 'Doctor CRUD', 'Priority Listing', 'Analytics', 'Emergency Support'].map((feature) => (
+          {['Ayudh Cashless Desk', 'Visit Requests', 'Doctor Management', 'Priority Listing', 'Analytics', 'Emergency Support'].map((feature) => (
             <div key={feature} className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs font-black text-emerald-800">
               <CheckCircle2 className="w-4 h-4" />
               {feature}
@@ -764,6 +862,18 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
             <button onClick={() => navigate('Notifications')} className="text-[11px] font-black text-blue-700 cursor-pointer">View All</button>
           </div>
           <div className="space-y-3">
+            {(collections.notifications || []).slice(0, 3).map((item: any) => (
+              <div key={item.id} className="grid grid-cols-[34px_1fr_auto] gap-3 text-xs items-start">
+                <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                  <Bell className="w-4 h-4" />
+                </span>
+                <div>
+                  <div className="font-black text-slate-950">{item.title}</div>
+                  <div className="text-[10px] text-slate-500 font-semibold">{item.message}</div>
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold">Live</span>
+              </div>
+            ))}
             {notifications.map((item) => {
               const Icon = item.icon;
               return (
@@ -794,6 +904,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
     }
     if (activeNav === 'Doctors Management') return renderDoctorsManagement();
     if (activeNav === 'Appointments') return renderAppointments();
+    if (activeNav === 'Beds') return renderBeds();
     if (activeNav === 'Profile' || activeNav === 'Subscription' || activeNav === 'Settings') return renderProfile();
 
     return (
@@ -829,9 +940,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
         <div className="w-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <button className="flex items-center gap-2.5 shrink-0 cursor-pointer" onClick={onNavigateHome}>
-              <div className="w-9 h-9 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center text-emerald-600">
-                <HeartPulse className="w-5 h-5" />
-              </div>
+              <BrandLogo className="w-9 h-9" />
               <div className="hidden sm:flex flex-col text-left">
                 <h1 className="text-sm font-black text-[#0f2e5a] tracking-tight leading-none uppercase">AYUDH VIKAS</h1>
                 <span className="text-[9px] font-extrabold text-[#006633] tracking-wider uppercase">HEALTH CARE NETWORK</span>
@@ -845,7 +954,10 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
 
             <div className="hidden md:flex flex-col min-w-0">
               <h2 className="text-sm font-black text-slate-900 truncate">Welcome, {user?.displayName || user?.name || 'Hospital Admin'}</h2>
-              <p className="text-[11px] text-slate-500 font-medium truncate">Here is what is happening with {currentHospital.shortName} today.</p>
+              <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-2">
+                Here is what is happening with {currentHospital.shortName} today.
+                <LiveStatusBadge />
+              </p>
             </div>
           </div>
 
@@ -858,9 +970,9 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
               <Headphones className="w-3.5 h-3.5 text-emerald-600" />
               <span className="hidden sm:inline">Hospital Support</span>
             </button>
+            <NotificationBell variant="light" />
             <button onClick={() => navigate('Notifications')} className="relative w-8 h-8 rounded-full border border-slate-200 hover:border-slate-300 flex items-center justify-center text-slate-600 bg-white cursor-pointer">
               <Bell className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">5</span>
             </button>
             <div className="relative">
               <button onClick={() => setUserDropdownOpen(!userDropdownOpen)} className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors">

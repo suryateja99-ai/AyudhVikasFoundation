@@ -32,6 +32,11 @@ const COLLECTIONS = [
   'insurance_applications',
   'prescriptions',
   'enquiries',
+  'doctor_hospital_assignments',
+  'hospital_beds',
+  'doctor_verification_actions',
+  'hospital_verification_actions',
+  'subscription_plans',
 ];
 
 function emptyStore() {
@@ -60,7 +65,13 @@ function loadLocal() {
 }
 
 function saveLocal(store) {
-  fs.writeFileSync(LOCAL_FILE, JSON.stringify(store, null, 2), 'utf8');
+  const next = JSON.stringify(store, null, 2);
+  try {
+    if (fs.existsSync(LOCAL_FILE) && fs.readFileSync(LOCAL_FILE, 'utf8') === next) return;
+  } catch {
+    /* rewrite */
+  }
+  fs.writeFileSync(LOCAL_FILE, next, 'utf8');
 }
 
 function cleanEnvValue(value) {
@@ -292,14 +303,21 @@ export function createDb(onChange) {
   function publicUser(user) {
     if (!user) return null;
     const { password_hash, passwordHash, _id, ...rest } = user;
+    const roles = Array.isArray(rest.roles) && rest.roles.length
+      ? rest.roles
+      : [rest.primaryRole || rest.role || rest.data?.role || 'patient'];
+    const primaryRole = rest.primaryRole || rest.role || roles[0];
     return {
       id: rest.id,
-      role: rest.role,
       name: rest.name,
       email: rest.email || rest.data?.email || '',
       phone: rest.phone || rest.data?.phone || '',
+      emailVerified: rest.emailVerified ?? rest.data?.emailVerified ?? true,
       createdAt: rest.created_at || rest.createdAt,
       ...(rest.data || {}),
+      role: primaryRole,
+      roles,
+      primaryRole,
     };
   }
 
@@ -346,14 +364,43 @@ export function createDb(onChange) {
     return publicUser(found);
   }
 
+  async function getRawUser(id) {
+    if (mode === 'mongodb') {
+      return collection('users').findOne({ id });
+    }
+    return store.users.find((user) => user.id === id) || null;
+  }
+
+  async function findUserByVerificationToken(token) {
+    const raw = String(token || '').trim();
+    if (!raw) return null;
+    if (mode === 'mongodb') {
+      return collection('users').findOne({
+        $or: [{ verificationToken: raw }, { 'data.verificationToken': raw }],
+      });
+    }
+    return (
+      store.users.find(
+        (user) => user.verificationToken === raw || user.data?.verificationToken === raw
+      ) || null
+    );
+  }
+
   async function createUser(user) {
+    const roles = Array.isArray(user.roles) && user.roles.length ? user.roles : [user.primaryRole || user.role || 'patient'];
+    const primaryRole = user.primaryRole || user.role || roles[0];
     const row = {
       id: user.id,
-      role: user.role,
+      role: primaryRole,
+      roles,
+      primaryRole,
       name: user.name,
       email: user.email || null,
       phone: user.phone || null,
       password_hash: user.password_hash,
+      emailVerified: user.emailVerified ?? false,
+      verificationToken: user.verificationToken || null,
+      verificationTokenExpiry: user.verificationTokenExpiry || null,
       data: user.data || {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -375,13 +422,20 @@ export function createDb(onChange) {
       : store.users.find((user) => user.id === id);
     if (!current) return null;
     const data = { ...(current.data || {}), ...(patch.data || patch) };
+    const nextRole = patch.primaryRole ?? patch.role ?? current.primaryRole ?? current.role;
+    const nextRoles = patch.roles ?? current.roles ?? [nextRole];
     const next = {
       ...current,
       name: patch.name ?? current.name,
       email: patch.email ?? current.email,
       phone: patch.phone ?? current.phone,
-      role: patch.role ?? current.role,
+      role: nextRole,
+      roles: nextRoles,
+      primaryRole: nextRole,
       password_hash: patch.password_hash ?? current.password_hash,
+      emailVerified: patch.emailVerified ?? current.emailVerified,
+      verificationToken: patch.verificationToken === undefined ? current.verificationToken : patch.verificationToken,
+      verificationTokenExpiry: patch.verificationTokenExpiry === undefined ? current.verificationTokenExpiry : patch.verificationTokenExpiry,
       data,
       updated_at: new Date().toISOString(),
     };
@@ -469,6 +523,18 @@ export function createDb(onChange) {
       store.collections[name] = (store.collections[name] || []).filter((item) => item.id !== id);
       persistSoon();
     }
+    if (name === 'doctors' || name === 'hospitals') {
+      const assignments = await list('doctor_hospital_assignments', name === 'doctors' ? { doctorId: id } : { hospitalId: id });
+      for (const assignment of assignments) {
+        await removeRecord('doctor_hospital_assignments', assignment.id);
+      }
+    }
+    if (name === 'hospitals') {
+      const beds = await list('hospital_beds', { hospitalId: id });
+      for (const bed of beds) {
+        await removeRecord('hospital_beds', bed.id);
+      }
+    }
     emit({ collection: name, action: 'delete', record: current || { id } });
     return current;
   }
@@ -509,6 +575,8 @@ export function createDb(onChange) {
     listUsers,
     findUserByIdentifier,
     getUser,
+    getRawUser,
+    findUserByVerificationToken,
     createUser,
     updateUser,
     removeUser,

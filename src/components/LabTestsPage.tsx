@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
+import { BrandLogo } from './BrandLogo';
 import { useAuth } from '../context/AuthContext';
 
 interface LabTestsPageProps {
@@ -278,9 +279,7 @@ export const LabTestsPage: React.FC<LabTestsPageProps> = ({
               
               {/* Logo */}
               <div className="flex items-center gap-3 cursor-pointer" onClick={onBackToHome}>
-                <div className="w-10 h-10 rounded-full bg-emerald-50 border-2 border-emerald-600 flex items-center justify-center p-1 text-emerald-600 shadow-2xs">
-                  <HeartPulse className="w-6 h-6" />
-                </div>
+                <BrandLogo className="w-10 h-10 shadow-2xs" />
                 <div className="flex flex-col">
                   <span className="text-base sm:text-lg font-black text-[#0f2e5a] tracking-tight uppercase leading-none">
                     AYUDH VIKAS

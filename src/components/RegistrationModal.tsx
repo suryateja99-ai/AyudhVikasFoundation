@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { DISTRICTS, SPECIALITIES } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
+import { BrandLogo } from './BrandLogo';
 
 export type RegistrationRole = 'patient' | 'doctor' | 'hospital' | 'marketing' | 'ambulance' | 'lab' | 'volunteer' | 'social_organizer';
 
@@ -279,7 +280,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     confirmPassword: '',
     consultationFee: '500',
     availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    declaration: false
+    declaration: false,
+    subSpeciality: '',
+    additionalSpecialities: [] as string[],
+    verificationDocuments: [] as { type: string; name: string; url: string; uploadedAt: string }[],
   });
 
   // Hospital Form State
@@ -298,11 +302,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     confirmPassword: '',
     district: 'Warangal',
     fullAddress: '',
-    keySpecialities: ['Cardiology', 'Neurology', 'Orthopedics', 'Emergency & Trauma'],
+    keySpecialities: [] as string[],
+    specialities: [] as string[],
+    primarySpeciality: '',
     hasEmergency24x7: true,
     hasAmbulance: true,
     hasBloodBank: true,
-    declaration: false
+    declaration: false,
+    verificationDocuments: [] as { type: string; name: string; url: string; uploadedAt: string }[],
   });
 
   // Marketing Team Form State
@@ -406,8 +413,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
   const passwordErrors = (password: string, confirmPassword: string) => {
     const errs: Record<string, string> = {};
-    if (!password || password.length < 6) {
-      errs.password = 'Password must be at least 6 characters / పాస్‌వర్డ్ కనీసం 6 అక్షరాలు ఉండాలి';
+    if (!password || password.length < 8) {
+      errs.password = 'Password must be at least 8 characters / పాస్‌వర్డ్ కనీసం 8 అక్షరాలు ఉండాలి';
+    } else if (!/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*]/.test(password)) {
+      errs.password = 'Must include uppercase, number and special character / పెద్ద అక్షరం, సంఖ్య, ప్రత్యేక అక్షరం అవసరం';
     }
     if (!confirmPassword) {
       errs.confirmPassword = 'Please confirm your password / పాస్‌వర్డ్‌ను నిర్ధారించండి';
@@ -416,6 +425,26 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     }
     return errs;
   };
+
+  const attachDocument = (
+    setCurrent: React.Dispatch<React.SetStateAction<any>>,
+    type: string,
+    file?: File
+  ) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCurrent((prev: any) => {
+        const docs = (prev.verificationDocuments || []).filter((d: any) => d.type !== type);
+        docs.push({ type, name: file.name, url: String(reader.result || ''), uploadedAt: new Date().toISOString() });
+        return { ...prev, verificationDocuments: docs };
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const uploadedName = (docs: { type: string; name: string }[] | undefined, type: string) =>
+    docs?.find((d) => d.type === type)?.name;
 
   const renderPasswordFields = (
     password: string,
@@ -658,6 +687,22 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       setErrors(pwdErrs);
       return;
     }
+    if (roleName === 'Doctor' && (!data.verificationDocuments || data.verificationDocuments.length < 3)) {
+      setErrors({ password: 'Upload degree, medical council, and license certificates for verification.' });
+      return;
+    }
+    if (roleName === 'Doctor' && !data.speciality) {
+      setErrors({ password: 'Select your primary speciality so patients can find you.' });
+      return;
+    }
+    if (roleName === 'Hospital' && (!data.specialities || data.specialities.length < 1)) {
+      setErrors({ password: 'Select at least one hospital speciality so patients can find you.' });
+      return;
+    }
+    if (roleName === 'Hospital' && (!data.verificationDocuments || data.verificationDocuments.length < 2)) {
+      setErrors({ password: 'Upload hospital registration and clinical establishment certificates.' });
+      return;
+    }
     const role = roleMap[roleName] || 'patient';
     if (!paymentConfirmed || (role !== 'hospital' && payableDonation <= 0)) {
       setErrors({ payment: role === 'hospital' ? 'Please confirm a hospital subscription plan before submitting.' : 'Please confirm the registration donation before submitting.' });
@@ -672,6 +717,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         password: data.password,
         phone: data.mobile || data.mobileNumber || data.contactPhone || '',
         mobileNumber: data.mobile || data.mobileNumber || data.contactPhone || '',
+        speciality: data.speciality || data.primarySpeciality,
+        specialities: data.specialities?.length ? data.specialities : [data.speciality, ...(data.additionalSpecialities || [])].filter(Boolean),
+        additionalSpecialities: data.additionalSpecialities,
       });
       setNonPatientSubmitted(roleName);
     } catch (err: any) {
@@ -696,11 +744,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         {/* ========================================================================= */}
         <div className="bg-[#0a2540] text-white px-4 sm:px-6 py-3.5 flex items-center justify-between border-b border-[#133860] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-md flex items-center justify-center">
-              <div className="w-full h-full bg-[#0a2540] rounded-[10px] flex items-center justify-center">
-                <span className="text-emerald-400 text-lg">🌿</span>
-              </div>
-            </div>
+            <BrandLogo className="w-10 h-10 shadow-md" />
             <div>
               <div className="text-sm sm:text-base font-black tracking-tight flex items-center gap-2">
                 <span>AYUDH VIKAS HEALTH CARE NETWORK</span>
@@ -1881,9 +1925,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <div className="bg-gradient-to-r from-[#0a2540] via-[#0f345a] to-[#144473] text-white p-4 rounded-xl shadow-inner relative overflow-hidden border border-blue-400/30">
                       <div className="flex items-center justify-between pb-3 border-b border-white/20">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-xs font-black">
-                            🌿
-                          </div>
+                          <BrandLogo className="w-7 h-7" />
                           <div>
                             <div className="text-xs font-black tracking-tight leading-none">AYUDH VIKAS HEALTH CARE</div>
                             <div className="text-[8px] text-emerald-300 font-bold uppercase">Patient Identity Card</div>
@@ -2045,7 +2087,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block font-bold text-slate-800 mb-1">Speciality *</label>
+                        <label className="block font-bold text-slate-800 mb-1">Primary Speciality *</label>
                         <select
                           value={doctorData.speciality}
                           onChange={e => setDoctorData({ ...doctorData, speciality: e.target.value })}
@@ -2053,6 +2095,41 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                         >
                           {SPECIALITIES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">Sub-speciality / Focus area</label>
+                      <input
+                        type="text"
+                        value={doctorData.subSpeciality}
+                        onChange={(e) => setDoctorData({ ...doctorData, subSpeciality: e.target.value })}
+                        placeholder="e.g. Interventional Cardiology, Pediatric Orthopedics"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">Additional specialities (shown in patient search)</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SPECIALITIES.filter((s) => s !== doctorData.speciality).map((spec) => {
+                          const selected = doctorData.additionalSpecialities.includes(spec);
+                          return (
+                            <button
+                              key={spec}
+                              type="button"
+                              onClick={() => {
+                                const next = selected
+                                  ? doctorData.additionalSpecialities.filter((s) => s !== spec)
+                                  : [...doctorData.additionalSpecialities, spec];
+                                setDoctorData({ ...doctorData, additionalSpecialities: next });
+                              }}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black border cursor-pointer ${
+                                selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {spec}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -2112,6 +2189,44 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           placeholder="Hospital Name"
                           className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                         />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={doctorData.email}
+                        onChange={e => setDoctorData({ ...doctorData, email: e.target.value })}
+                        placeholder="doctor@email.com"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      />
+                    </div>
+
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-3">
+                      <p className="font-black text-blue-950 uppercase text-[11px]">Verification certificates (PDF or image) *</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          ['degree', 'MBBS / MD / MS Degree *'],
+                          ['council', 'State Medical Council Certificate *'],
+                          ['license', 'Practice License / Registration *'],
+                          ['specialty_cert', 'Speciality / Super-speciality Certificate'],
+                          ['id_proof', 'Aadhaar / PAN (ID proof)'],
+                          ['experience', 'Experience / Hospital appointment letter'],
+                        ].map(([type, label]) => (
+                          <div key={type}>
+                            <label className="block font-bold text-slate-800 mb-1">{label}</label>
+                            <input
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={(e) => attachDocument(setDoctorData, type, e.target.files?.[0])}
+                              className="w-full text-xs"
+                            />
+                            {uploadedName(doctorData.verificationDocuments, type) && (
+                              <p className="text-[10px] text-emerald-700 font-bold mt-1">Uploaded: {uploadedName(doctorData.verificationDocuments, type)}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -2232,6 +2347,68 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                         >
                           {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-800 mb-1">Hospital specialities * (used in patient search)</label>
+                      <p className="text-[10px] text-slate-500 font-semibold mb-2">Select every department you want patients to find you under.</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SPECIALITIES.map((spec) => {
+                          const selected = hospitalData.specialities.includes(spec);
+                          return (
+                            <button
+                              key={spec}
+                              type="button"
+                              onClick={() => {
+                                const next = selected
+                                  ? hospitalData.specialities.filter((s) => s !== spec)
+                                  : [...hospitalData.specialities, spec];
+                                setHospitalData({
+                                  ...hospitalData,
+                                  specialities: next,
+                                  keySpecialities: next,
+                                  primarySpeciality: next[0] || '',
+                                });
+                              }}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black border cursor-pointer ${
+                                selected ? 'bg-amber-600 text-white border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {spec}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {hospitalData.specialities.length > 0 && (
+                        <p className="text-[10px] text-amber-800 font-bold mt-1.5">Selected: {hospitalData.specialities.join(', ')}</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-3">
+                      <p className="font-black text-amber-950 uppercase text-[11px]">Hospital certificates (PDF or image) *</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          ['registration', 'Hospital Registration Certificate *'],
+                          ['clinical_license', 'Clinical Establishment License *'],
+                          ['nabh', 'NABH / NABL Certificate'],
+                          ['fire_safety', 'Fire & Safety NOC'],
+                          ['pollution', 'Pollution Control Board certificate'],
+                          ['gst', 'GST / PAN of hospital'],
+                        ].map(([type, label]) => (
+                          <div key={type}>
+                            <label className="block font-bold text-slate-800 mb-1">{label}</label>
+                            <input
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={(e) => attachDocument(setHospitalData, type, e.target.files?.[0])}
+                              className="w-full text-xs"
+                            />
+                            {uploadedName(hospitalData.verificationDocuments, type) && (
+                              <p className="text-[10px] text-emerald-700 font-bold mt-1">Uploaded: {uploadedName(hospitalData.verificationDocuments, type)}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
 

@@ -30,11 +30,14 @@ import {
   ChevronDown,
   Info,
   Check,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { HospitalPartner, SeniorDoctor, HospitalVisitRequest, SymptomItem, ActiveModal } from '../types';
-import { PARTNER_HOSPITALS, SYMPTOMS_LIST, DISTRICTS, LOCATIONS_BY_DISTRICT, INITIAL_HOSPITAL_VISIT_REQUESTS } from '../data/mockData';
+import { PARTNER_HOSPITALS, SYMPTOMS_LIST, DISTRICTS, SPECIALITIES, INITIAL_HOSPITAL_VISIT_REQUESTS } from '../data/mockData';
 import { useLiveData } from '../context/LiveDataContext';
+import { api } from '../lib/api';
+import { BrandLogo } from './BrandLogo';
 
 interface HospitalSearchVisitSectionProps {
   userProfile?: {
@@ -77,13 +80,19 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
   onPendingVisitConsumed,
   onRequireRegister
 }) => {
-  const { collections, create } = useLiveData();
+  const { collections, create, loading: liveLoading } = useLiveData();
+  const [submittingVisit, setSubmittingVisit] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [apiHospitals, setApiHospitals] = useState<HospitalPartner[] | null>(null);
   const liveHospitals = collections.hospitals.length ? collections.hospitals : PARTNER_HOSPITALS;
-  const liveRequests = collections.visit_requests.length ? collections.visit_requests : INITIAL_HOSPITAL_VISIT_REQUESTS;
+  const liveRequests = liveLoading && !collections.visit_requests.length
+    ? INITIAL_HOSPITAL_VISIT_REQUESTS
+    : collections.visit_requests;
 
-  const allRequests: HospitalVisitRequest[] = (visitRequests && Array.isArray(visitRequests)) 
-    ? visitRequests 
-    : liveRequests;
+  const allRequests: HospitalVisitRequest[] = ((visitRequests && Array.isArray(visitRequests))
+    ? visitRequests
+    : liveRequests
+  ).filter((request) => !userProfile.patientId || request.patientId === userProfile.patientId || userProfile.patientId === 'GUEST');
   // Location Filter (defaults to Hanamkonda / Warangal - Patient's current location)
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Hanamkonda');
   const [userCurrentLocation, setUserCurrentLocation] = useState<string>('Subedari, Hanamkonda (Current Location)');
@@ -131,65 +140,55 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
     }, 600);
   };
 
-  // Filter and sort hospitals
-  const filteredHospitals = useMemo(() => {
-    return liveHospitals.filter(hospital => {
-      // District filter
-      if (selectedDistrict !== 'All' && hospital.district !== selectedDistrict) {
-        // If district doesn't match directly, check if all is selected
-        return false;
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await api.searchHospitals({
+          q: searchQuery.trim(),
+          district: selectedDistrict === 'All' ? '' : selectedDistrict,
+          speciality: selectedSymptom?.speciality || (selectedSpeciality === 'All' ? '' : selectedSpeciality),
+          sort: sortBy,
+        });
+        setApiHospitals(res.items || []);
+      } catch {
+        setApiHospitals(null);
+      } finally {
+        setSearching(false);
       }
+    }, 280);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, selectedDistrict, selectedSpeciality, selectedSymptom, sortBy]);
 
-      // Speciality filter
+  const filteredHospitals = useMemo(() => {
+    const source = apiHospitals || liveHospitals;
+    return source.filter((hospital) => {
+      if (selectedDistrict !== 'All' && hospital.district !== selectedDistrict) return false;
       if (selectedSpeciality !== 'All') {
-        const matchesSpec = hospital.specialities.some(s => 
-          s.toLowerCase().includes(selectedSpeciality.toLowerCase())
-        ) || hospital.seniorDoctors?.some(d => 
-          d.speciality.toLowerCase().includes(selectedSpeciality.toLowerCase())
-        );
+        const matchesSpec =
+          (hospital.specialities || []).some((s) => s.toLowerCase().includes(selectedSpeciality.toLowerCase())) ||
+          hospital.seniorDoctors?.some((d) => d.speciality.toLowerCase().includes(selectedSpeciality.toLowerCase()));
         if (!matchesSpec) return false;
       }
-
-      // Symptom filter
       if (selectedSymptom) {
-        const matchesSymptomSpec = hospital.specialities.some(s => 
-          s.toLowerCase().includes(selectedSymptom.speciality.toLowerCase())
-        ) || hospital.seniorDoctors?.some(d => 
-          d.speciality.toLowerCase().includes(selectedSymptom.speciality.toLowerCase())
-        );
+        const matchesSymptomSpec =
+          (hospital.specialities || []).some((s) => s.toLowerCase().includes(selectedSymptom.speciality.toLowerCase())) ||
+          hospital.seniorDoctors?.some((d) => d.speciality.toLowerCase().includes(selectedSymptom.speciality.toLowerCase()));
         if (!matchesSymptomSpec) return false;
       }
-
-      // Text query search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesName = hospital.name.toLowerCase().includes(q) || hospital.shortName.toLowerCase().includes(q);
         const matchesLocation = hospital.location?.toLowerCase().includes(q) || hospital.address?.toLowerCase().includes(q);
-        const matchesDoctor = hospital.seniorDoctors?.some(d => 
-          d.name.toLowerCase().includes(q) || d.speciality.toLowerCase().includes(q) || d.designation.toLowerCase().includes(q)
+        const matchesDoctor = hospital.seniorDoctors?.some((d) =>
+          d.name.toLowerCase().includes(q) || d.speciality.toLowerCase().includes(q) || (d.designation || '').toLowerCase().includes(q)
         );
-        const matchesSpec = hospital.specialities.some(s => s.toLowerCase().includes(q));
-
-        if (!matchesName && !matchesLocation && !matchesDoctor && !matchesSpec) {
-          return false;
-        }
+        const matchesSpec = (hospital.specialities || []).some((s) => s.toLowerCase().includes(q));
+        if (!matchesName && !matchesLocation && !matchesDoctor && !matchesSpec) return false;
       }
-
       return true;
-    }).sort((a, b) => {
-      // Default: Closest hospitals listed first
-      if (sortBy === 'distance') {
-        return (a.distanceKm || 99) - (b.distanceKm || 99);
-      }
-      if (sortBy === 'rating') {
-        return (b.rating || 0) - (a.rating || 0);
-      }
-      if (sortBy === 'beds') {
-        return (b.availableBeds || 0) - (a.availableBeds || 0);
-      }
-      return 0;
     });
-  }, [selectedDistrict, selectedSpeciality, selectedSymptom, searchQuery, sortBy]);
+  }, [apiHospitals, liveHospitals, selectedDistrict, selectedSpeciality, selectedSymptom, searchQuery]);
 
   // Open Visit Request Modal
   const handleOpenVisitModal = (hospital: HospitalPartner, doctor?: SeniorDoctor) => {
@@ -203,7 +202,7 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
     }
     setSelectedHospitalForVisit(hospital);
     setSelectedDoctorForVisit(doctor || null);
-    setVisitDepartment(doctor ? doctor.speciality : (selectedSymptom?.speciality || hospital.specialities[0] || 'General Medicine'));
+    setVisitDepartment(doctor ? doctor.speciality : (selectedSymptom?.speciality || hospital.specialities?.[0] || 'General Medicine'));
     if (selectedSymptom) {
       setVisitChiefComplaint(`Symptoms: ${selectedSymptom.name} (${selectedSymptom.teluguName || ''}). ${selectedSymptom.description}`);
     } else {
@@ -256,11 +255,16 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
       isAyudhMember: true
     };
 
-    const saved = await create('visit_requests', newRequest);
-    if (onAddVisitRequest) {
-      onAddVisitRequest(saved);
+    try {
+      setSubmittingVisit(true);
+      const saved = await create('visit_requests', newRequest);
+      if (onAddVisitRequest) {
+        onAddVisitRequest(saved);
+      }
+      setVisitFormSuccess(saved);
+    } finally {
+      setSubmittingVisit(false);
     }
-    setVisitFormSuccess(saved);
   };
 
   return (
@@ -344,15 +348,16 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
             {/* Search Input and Filters Bar */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              <div className="md:col-span-6 relative">
+              <div className="md:col-span-5 relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search hospital name, senior doctor, department, or location..."
+                  placeholder="Search hospital, doctor, speciality, or location..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
+                {searching && <Loader2 className="w-4 h-4 text-emerald-600 animate-spin absolute right-8 top-1/2 -translate-y-1/2" />}
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
@@ -363,8 +368,7 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
                 )}
               </div>
 
-              {/* District Filter */}
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <select
                   value={selectedDistrict}
                   onChange={(e) => setSelectedDistrict(e.target.value)}
@@ -372,21 +376,36 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
                 >
                   <option value="All">All Districts</option>
                   {DISTRICTS.map(d => (
-                    <option key={d} value={d}>{d} (Nearby First)</option>
+                    <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Sort By Filter */}
               <div className="md:col-span-3">
+                <select
+                  value={selectedSpeciality}
+                  onChange={(e) => {
+                    setSelectedSpeciality(e.target.value);
+                    setSelectedSymptom(null);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value="All">All Specialities</option>
+                  {SPECIALITIES.map((spec) => (
+                    <option key={spec} value={spec}>{spec}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                 >
-                  <option value="distance">📍 Sort: Closest Distance First</option>
-                  <option value="rating">⭐ Sort: Highest Rating (4.9+)</option>
-                  <option value="beds">🛏️ Sort: Max Available Beds</option>
+                  <option value="distance">Closest first</option>
+                  <option value="rating">Top rated</option>
+                  <option value="beds">Most beds</option>
                 </select>
               </div>
             </div>
@@ -480,7 +499,12 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
           {/* HOSPITALS LISTING (Sorted by Closest Distance First) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
-              <span>Showing <strong>{filteredHospitals.length}</strong> Partner Hospitals near <strong>{selectedDistrict}</strong></span>
+              <span>
+                {searching ? 'Searching network… ' : ''}
+                Showing <strong>{filteredHospitals.length}</strong> hospitals
+                {selectedSpeciality !== 'All' ? ` for ${selectedSpeciality}` : ''}
+                {selectedDistrict !== 'All' ? ` in ${selectedDistrict}` : ''}
+              </span>
               <span className="text-emerald-700 font-bold">✓ Ayudh Cashless Empanelled Facilities</span>
             </div>
 
@@ -571,7 +595,7 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
                         {/* Specialities Chips */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           <span className="text-[11px] font-bold text-slate-500 self-center mr-1">Specialities:</span>
-                          {hospital.specialities.map((spec) => {
+                          {(hospital.specialities || []).map((spec) => {
                             const isMatch = selectedSymptom?.speciality.toLowerCase().includes(spec.toLowerCase()) ||
                                             spec.toLowerCase().includes(selectedSpeciality.toLowerCase());
                             return (
@@ -1042,10 +1066,11 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
                   </button>
                   <button
                     type="submit"
-                    className="bg-[#00703c] hover:bg-[#005830] text-white font-black px-6 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                    disabled={submittingVisit}
+                    className="bg-[#00703c] hover:bg-[#005830] text-white font-black px-6 py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Submit Visit Request</span>
+                    <span>{submittingVisit ? 'Submitting...' : 'Submit Visit Request'}</span>
                   </button>
                 </div>
               </form>
@@ -1060,7 +1085,7 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <HeartPulse className="w-5 h-5 text-emerald-600" />
+                <BrandLogo className="w-7 h-7" />
                 <span className="text-xs font-black text-[#0f2e5a] uppercase tracking-wider">
                   Ayudh Foundation Visit Pass
                 </span>
