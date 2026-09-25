@@ -63,6 +63,7 @@ export function applyRoleBasedFilters(collection, filter, userRole, userId, user
   const doctorId = userData.doctorId;
   const hospitalId = userData.hospitalId;
   const labId = userData.labId;
+  const ambulanceId = userData.ambulanceId;
 
   switch (collection) {
     case 'patients':
@@ -71,7 +72,6 @@ export function applyRoleBasedFilters(collection, filter, userRole, userId, user
       }
       break;
     case 'appointments':
-    case 'ambulance_bookings':
     case 'lab_bookings':
     case 'home_care_bookings':
     case 'camp_registrations':
@@ -86,6 +86,10 @@ export function applyRoleBasedFilters(collection, filter, userRole, userId, user
       else if (roles.includes('doctor') && doctorId && collection === 'appointments') filters.doctorId = doctorId;
       else if (roles.includes('hospital') && hospitalId) filters.hospitalId = hospitalId;
       else if (roles.includes('lab') && labId && collection === 'lab_bookings') filters.labId = labId;
+      break;
+    case 'ambulance_bookings':
+      if (roles.includes('patient') && patientId) filters.patientId = patientId;
+      else if (roles.includes('ambulance') && ambulanceId) filters.driverId = ambulanceId;
       break;
     case 'visit_requests':
       if (roles.includes('patient') && patientId) filters.patientId = patientId;
@@ -127,12 +131,14 @@ export function canModifyRecord(user, collection, record) {
   const doctorId = user.doctorId || user.data?.doctorId;
   const hospitalId = user.hospitalId || user.data?.hospitalId;
   const labId = user.labId || user.data?.labId;
+  const ambulanceId = user.ambulanceId || user.data?.ambulanceId;
 
   if (record.createdBy && record.createdBy === user.id) return true;
   if (userHasRole(user, 'patient') && patientId && (record.patientId === patientId || record.id === patientId)) return true;
   if (userHasRole(user, 'doctor') && doctorId && (record.doctorId === doctorId || record.id === doctorId)) return true;
   if (userHasRole(user, 'hospital') && hospitalId && (record.hospitalId === hospitalId || record.id === hospitalId)) return true;
   if (userHasRole(user, 'lab') && labId && (record.labId === labId || record.id === labId)) return true;
+  if (userHasRole(user, 'ambulance') && ambulanceId && (record.driverId === ambulanceId || record.ambulanceId === ambulanceId || record.id === ambulanceId)) return true;
   if (collection === 'notifications' && record.userId === user.id) return true;
   return false;
 }

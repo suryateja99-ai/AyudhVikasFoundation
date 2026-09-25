@@ -355,13 +355,13 @@ export function createDb(onChange) {
       : [rest.primaryRole || rest.role || safeData.role || 'patient'];
     const primaryRole = rest.primaryRole || rest.role || roles[0];
     return {
+      ...safeData,
       id: rest.id,
-      name: rest.name,
+      name: rest.name || safeData.name || '',
       email: rest.email || safeData.email || '',
       phone: rest.phone || safeData.phone || '',
       emailVerified: rest.emailVerified ?? safeData.emailVerified ?? true,
       createdAt: rest.created_at || rest.createdAt,
-      ...safeData,
       role: primaryRole,
       roles,
       primaryRole,

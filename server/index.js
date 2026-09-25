@@ -66,6 +66,7 @@ const FUND360_COLLECTIONS = new Set([
 const FUND360_ANNUAL_AMOUNT = 365;
 const FUND360_MONTHLY_AMOUNT = 30;
 const FUND360_SERVICE_MAX = 365;
+const DEFAULT_DRIVER_IMAGE = '/src/assets/images/patient_avatar_1787229395408.jpg';
 
 const FUND360_BENEFIT_DEFINITIONS = [
   { year: 1, code: 'YEAR1_MEMBER_ID', title: 'Active Fund 365 member ID', description: 'Member ID confirming active Ayudh Vikas Fund 365 participation.' },
@@ -357,6 +358,7 @@ function userData(user) {
     doctorId: user.doctorId || user.data?.doctorId,
     hospitalId: user.hospitalId || user.data?.hospitalId,
     labId: user.labId || user.data?.labId,
+    ambulanceId: user.ambulanceId || user.data?.ambulanceId,
     ...user,
   };
 }
@@ -449,6 +451,7 @@ async function getActor(req) {
   let hospital = null;
   let doctor = null;
   let lab = null;
+  let ambulance = null;
   if (user.role === 'hospital') {
     const hospitals = await db.list('hospitals');
     hospital = hospitals.find((item) =>
@@ -478,6 +481,17 @@ async function getActor(req) {
       cleanPhone(item.phone) === cleanPhone(user.phone)
     ) || null;
   }
+  if (user.role === 'ambulance') {
+    const partnerships = await db.list('partnerships');
+    ambulance = partnerships.find((item) =>
+      item.id === user.ambulanceId ||
+      item.id === user.data?.ambulanceId ||
+      item.ambulanceId === user.ambulanceId ||
+      item.ambulanceId === user.data?.ambulanceId ||
+      sameText(item.driverName || item.name, user.driverName || user.data?.driverName || user.name) ||
+      cleanPhone(item.phone || item.mobile) === cleanPhone(user.phone)
+    ) || null;
+  }
   return {
     user,
     role: user.role,
@@ -488,9 +502,14 @@ async function getActor(req) {
     doctorName: doctor?.name || user.name,
     labId: user.labId || user.data?.labId || lab?.labId || lab?.id,
     labName: lab?.labName || lab?.name || user.labName || user.data?.labName || user.name,
+    ambulanceId: user.ambulanceId || user.data?.ambulanceId || ambulance?.ambulanceId || ambulance?.id,
+    ambulanceName: ambulance?.driverName || ambulance?.name || user.driverName || user.data?.driverName || user.name,
+    vehicleNumber: ambulance?.vehicleNumber || user.data?.vehicleNumber || '',
+    ambulancePhone: ambulance?.phone || ambulance?.mobile || user.phone || '',
     hospital,
     doctor,
     lab,
+    ambulance,
   };
 }
 
@@ -778,6 +797,7 @@ function actorOwnsSession(actor, session) {
     );
   }
   if (actor.role === 'lab') return labOwnsBooking(actor, session);
+  if (actor.role === 'ambulance') return ambulanceOwnsBooking(actor, session, { allowUnassigned: true });
   return false;
 }
 
@@ -825,6 +845,129 @@ function normalizeLabBooking(booking) {
 async function getLabBookingsForActor(actor) {
   const items = (await db.list('lab_bookings')).map(normalizeLabBooking);
   return items.filter((item) => labOwnsBooking(actor, item));
+}
+
+function estimateAmbulanceKm(pickup = '', drop = '') {
+  const from = String(pickup || '').trim().toLowerCase();
+  const to = String(drop || '').trim().toLowerCase();
+  if (!from || !to) return 8;
+  if (from === to) return 3;
+  const sameAreaHints = ['hanamkonda', 'warangal', 'subedari', 'mgm', 'hunter road', 'kazipet'];
+  const overlap = sameAreaHints.filter((hint) => from.includes(hint) && to.includes(hint)).length;
+  const base = overlap ? 7 : 14;
+  const spread = Math.abs(from.length - to.length) % 9;
+  return Math.max(3, Math.min(42, base + spread));
+}
+
+function normalizeAmbulanceBooking(booking) {
+  if (!booking) return null;
+  const status = String(booking.status || 'Pending');
+  const completed = ['Completed', 'Closed'].includes(status) || isCompletedSession(booking);
+  const accepted = ['Accepted', 'Scheduled', 'Ride Started', 'En Route', 'Completed'].includes(status);
+  return {
+    ...booking,
+    sessionId: booking.sessionId || booking.id,
+    sourceCollection: 'ambulance_bookings',
+    patientPhone: booking.patientPhone || booking.phone || booking.mobileNumber || '',
+    requestStatus: status,
+    rideStatus: booking.rideStatus || status,
+    estimatedKm: Number(booking.estimatedKm || estimateAmbulanceKm(booking.pickupLocation, booking.dropLocation)),
+    sessionStatus: booking.sessionStatus || (completed ? 'COMPLETED' : accepted ? 'ACTIVE' : 'REQUESTED'),
+    visitPassStatus: booking.visitPassStatus || (completed ? 'EXPIRED' : accepted ? 'ACTIVE' : 'PENDING'),
+  };
+}
+
+function isAmbulancePending(booking) {
+  return ['Pending', 'Requested'].includes(String(booking?.status || 'Pending'));
+}
+
+function ambulanceOwnsBooking(actor, booking, { allowUnassigned = false } = {}) {
+  if (!actor || !booking) return false;
+  if (actor.role === 'admin') return true;
+  if (actor.role === 'patient') return String(booking.patientId || '') === String(actor.patientId || '');
+  if (actor.role !== 'ambulance') return false;
+  const actorAmbulanceId = String(actor.ambulanceId || '').trim();
+  const bookingAmbulanceId = String(booking.driverId || booking.ambulanceId || '').trim();
+  if (bookingAmbulanceId && actorAmbulanceId) return bookingAmbulanceId === actorAmbulanceId;
+  if (cleanPhone(booking.driverContact) && cleanPhone(actor.ambulancePhone)) {
+    return cleanPhone(booking.driverContact) === cleanPhone(actor.ambulancePhone);
+  }
+  return allowUnassigned && !bookingAmbulanceId && isAmbulancePending(booking);
+}
+
+async function getAmbulanceBookingsForActor(actor, { includeUnassigned = false } = {}) {
+  const items = (await db.list('ambulance_bookings')).map(normalizeAmbulanceBooking);
+  return items.filter((item) => ambulanceOwnsBooking(actor, item, { allowUnassigned: includeUnassigned }));
+}
+
+async function getAmbulanceDrivers() {
+  const [partnerships, users, bookings] = await Promise.all([
+    db.list('partnerships'),
+    db.listUsers({ role: 'ambulance' }),
+    db.list('ambulance_bookings'),
+  ]);
+  const stats = new Map();
+  bookings.forEach((booking) => {
+    const key = String(booking.driverId || booking.ambulanceId || '').trim() || cleanPhone(booking.driverContact);
+    if (!key) return;
+    const current = stats.get(key) || { acceptedRides: 0, completedRides: 0, pendingRides: 0 };
+    const status = String(booking.status || '');
+    if (['Accepted', 'Scheduled', 'Ride Started', 'En Route', 'Completed'].includes(status)) current.acceptedRides += 1;
+    if (['Completed', 'Closed'].includes(status)) current.completedRides += 1;
+    if (['Pending', 'Requested'].includes(status)) current.pendingRides += 1;
+    stats.set(key, current);
+  });
+  const byId = new Map();
+  partnerships
+    .filter((item) => item.role === 'ambulance')
+    .forEach((item) => {
+      const id = item.ambulanceId || item.id;
+      const computed = stats.get(String(id)) || stats.get(cleanPhone(item.phone || item.mobile)) || {};
+      byId.set(String(id), {
+        id,
+        ambulanceId: id,
+        userId: item.userId || '',
+        driverName: item.driverName || item.name || 'Ambulance Driver',
+        name: item.driverName || item.name || 'Ambulance Driver',
+        phone: item.phone || item.mobile || '',
+        vehicleNumber: item.vehicleNumber || '',
+        vehicleType: item.vehicleType || item.ambulanceType || 'Basic Life Support (BLS)',
+        district: item.district || 'Warangal',
+        baseLocation: item.baseLocation || item.address || 'Ayudh Vikas Dispatch Unit',
+        image: item.image || DEFAULT_DRIVER_IMAGE,
+        status: item.status || 'Active',
+        verificationStatus: item.verificationStatus || 'VERIFIED',
+        acceptedRides: Number(item.acceptedRides || computed.acceptedRides || 0),
+        completedRides: Number(item.completedRides || computed.completedRides || 0),
+        pendingRides: Number(computed.pendingRides || 0),
+      });
+    });
+  users.forEach((user) => {
+    const id = user.ambulanceId || user.data?.ambulanceId || user.id;
+    if (byId.has(String(id))) return;
+    const computed = stats.get(String(id)) || stats.get(cleanPhone(user.phone)) || {};
+    byId.set(String(id), {
+      id,
+      ambulanceId: id,
+      userId: user.id,
+      driverName: user.data?.driverName || user.name || 'Ambulance Driver',
+      name: user.data?.driverName || user.name || 'Ambulance Driver',
+      phone: user.phone || '',
+      vehicleNumber: user.data?.vehicleNumber || '',
+      vehicleType: user.data?.vehicleType || 'Basic Life Support (BLS)',
+      district: user.data?.district || 'Warangal',
+      baseLocation: user.data?.baseLocation || 'Ayudh Vikas Dispatch Unit',
+      image: user.data?.image || DEFAULT_DRIVER_IMAGE,
+      status: user.data?.status || 'Active',
+      verificationStatus: user.data?.verificationStatus || 'VERIFIED',
+      acceptedRides: Number(computed.acceptedRides || 0),
+      completedRides: Number(computed.completedRides || 0),
+      pendingRides: Number(computed.pendingRides || 0),
+    });
+  });
+  return Array.from(byId.values())
+    .filter((driver) => String(driver.status || 'Active') !== 'Inactive')
+    .sort((a, b) => (b.completedRides - a.completedRides) || (b.acceptedRides - a.acceptedRides));
 }
 
 async function findSession(sessionId) {
@@ -1082,6 +1225,7 @@ app.post('/api/auth/register', async (req, res) => {
     const doctorId = role === 'doctor' ? makeId('DOC') : undefined;
     const hospitalId = role === 'hospital' ? makeId('HOSP') : undefined;
     const labId = role === 'lab' ? makeId('LAB') : undefined;
+    const ambulanceId = role === 'ambulance' ? makeId('AMB') : undefined;
     const verificationToken = email ? crypto.randomBytes(32).toString('hex') : null;
     const verificationTokenExpiry = verificationToken ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null;
 
@@ -1103,6 +1247,7 @@ app.post('/api/auth/register', async (req, res) => {
         doctorId,
         hospitalId,
         labId,
+        ambulanceId,
         roles,
         primaryRole,
         displayName: name.split(' ')[0] + (name.split(' ')[1] ? ` ${name.split(' ')[1][0]}.` : ''),
@@ -1216,6 +1361,29 @@ app.post('/api/auth/register', async (req, res) => {
         testCategories: body.testCategories || [],
         homeCollectionAvailable: body.homeCollectionAvailable !== false,
         digitalReportsTurnaround: body.digitalReportsTurnaround || 'Within 24 Hours',
+        status: 'Active',
+        verificationStatus: 'PENDING_VERIFICATION',
+        submittedAt: formatDateTime(),
+      });
+    } else if (role === 'ambulance') {
+      await db.create('partnerships', {
+        id: ambulanceId,
+        userId: user.id,
+        role,
+        ambulanceId,
+        name: body.driverName || name,
+        driverName: body.driverName || name,
+        licenseNumber: body.licenseNumber || '',
+        vehicleNumber: body.vehicleNumber || '',
+        vehicleType: body.vehicleType || body.ambulanceType || 'Basic Life Support (BLS)',
+        phone,
+        email,
+        district: body.district || 'Warangal',
+        baseLocation: body.baseLocation || body.address || '',
+        address: body.baseLocation || body.address || '',
+        image: body.photoUrl || body.image || DEFAULT_DRIVER_IMAGE,
+        acceptedRides: 0,
+        completedRides: 0,
         status: 'Active',
         verificationStatus: 'PENDING_VERIFICATION',
         submittedAt: formatDateTime(),
@@ -2270,6 +2438,255 @@ app.post('/api/lab/bookings/:id/close', requireRole(['lab', 'admin']), async (re
   res.json({ item: normalizeLabBooking(item), reports });
 });
 
+app.get('/api/ambulance/drivers', authOptional, async (_req, res) => {
+  try {
+    const items = await getAmbulanceDrivers();
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load ambulance riders.' });
+  }
+});
+
+app.get('/api/ambulance/dashboard', requireRole(['ambulance', 'admin']), async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    const [visibleBookings, allBookings, drivers] = await Promise.all([
+      getAmbulanceBookingsForActor(actor, { includeUnassigned: true }),
+      db.list('ambulance_bookings'),
+      getAmbulanceDrivers(),
+    ]);
+    const bookings = visibleBookings
+      .map(normalizeAmbulanceBooking)
+      .sort((a, b) => String(b.updatedAt || b.requestedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.requestedAt || a.createdAt || '')));
+    const requests = bookings.filter((item) => isAmbulancePending(item));
+    const active = bookings.filter((item) => ['Accepted', 'Scheduled', 'Ride Started', 'En Route'].includes(String(item.status || '')));
+    const history = bookings.filter((item) => ['Completed', 'Closed', 'Rejected', 'Cancelled'].includes(String(item.status || '')));
+    const now = Date.now();
+    const upcoming = active.filter((item) => {
+      const dateText = `${item.preferredDate || ''} ${item.preferredTime || ''}`.trim();
+      const parsed = Date.parse(dateText);
+      return Number.isNaN(parsed) || parsed >= now || /immediate/i.test(String(item.preferredTime || item.pickupType || ''));
+    });
+    const allNormalized = allBookings.map(normalizeAmbulanceBooking);
+    const hospitalCounts = {};
+    allNormalized.forEach((booking) => {
+      const key = String(booking.dropLocation || booking.hospitalName || 'Not specified').trim();
+      hospitalCounts[key] = (hospitalCounts[key] || 0) + 1;
+    });
+    const topHospitals = Object.entries(hospitalCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const uniquePatients = new Set(allNormalized.map((item) => item.patientId || cleanPhone(item.phone)).filter(Boolean));
+    const driver = drivers.find((item) => String(item.ambulanceId || item.id) === String(actor.ambulanceId || '')) || {
+      id: actor.ambulanceId,
+      ambulanceId: actor.ambulanceId,
+      driverName: actor.ambulanceName,
+      name: actor.ambulanceName,
+      phone: actor.ambulancePhone,
+      vehicleNumber: actor.vehicleNumber,
+      vehicleType: actor.ambulance?.vehicleType || 'Basic Life Support (BLS)',
+      baseLocation: actor.ambulance?.baseLocation || 'Ayudh Vikas Dispatch Unit',
+      district: actor.ambulance?.district || 'Warangal',
+      image: actor.user?.data?.image || DEFAULT_DRIVER_IMAGE,
+    };
+    res.json({
+      driver,
+      stats: {
+        totalBookings: bookings.length,
+        pendingBookings: requests.length,
+        acceptedBookings: active.length,
+        completedBookings: bookings.filter((item) => ['Completed', 'Closed'].includes(String(item.status || ''))).length,
+        previousBookings: history.length,
+        offlineBookings: bookings.filter((item) => item.source === 'Offline' || item.offlineBooking).length,
+      },
+      predictions: {
+        appUsers: uniquePatients.size,
+        totalAyudhAmbulanceBookings: allNormalized.length,
+        mostRequestedHospitals: topHospitals,
+        averageKm: Math.round(allNormalized.reduce((sum, item) => sum + Number(item.estimatedKm || 0), 0) / Math.max(1, allNormalized.length)),
+      },
+      requests,
+      active,
+      upcoming,
+      accepted: [...active, ...history.filter((item) => ['Completed', 'Closed'].includes(String(item.status || '')))],
+      history,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to load ambulance dashboard.' });
+  }
+});
+
+async function assertAmbulanceBookingAccess(req, res, bookingId, { allowUnassigned = false, allowCompleted = false } = {}) {
+  const actor = await getActor(req);
+  if (!actor || !['ambulance', 'admin'].includes(actor.role)) {
+    res.status(403).json({ error: 'Only ambulance users can manage ambulance bookings.' });
+    return null;
+  }
+  const raw = await db.get('ambulance_bookings', bookingId);
+  if (!raw) {
+    res.status(404).json({ error: 'Ambulance booking not found.' });
+    return null;
+  }
+  const booking = normalizeAmbulanceBooking(raw);
+  if (!ambulanceOwnsBooking(actor, booking, { allowUnassigned })) {
+    res.status(403).json({ error: 'This ambulance booking is not assigned to your account.' });
+    return null;
+  }
+  if (!allowCompleted && isCompletedSession(booking)) {
+    res.status(409).json({ error: 'This ambulance ride is already completed.' });
+    return null;
+  }
+  return { actor, booking };
+}
+
+app.patch('/api/ambulance/bookings/:id/accept', requireRole(['ambulance', 'admin']), async (req, res) => {
+  const result = await assertAmbulanceBookingAccess(req, res, req.params.id, { allowUnassigned: true });
+  if (!result) return;
+  const { actor, booking } = result;
+  if (!isAmbulancePending(booking)) {
+    return res.status(400).json({ error: 'This ambulance request is already processed.' });
+  }
+  const acceptedAt = formatDateTime();
+  const item = await db.update('ambulance_bookings', booking.id, {
+    driverId: booking.driverId || actor.ambulanceId,
+    ambulanceId: booking.ambulanceId || actor.ambulanceId,
+    driverName: booking.driverName || actor.ambulanceName,
+    driverContact: booking.driverContact || actor.ambulancePhone,
+    vehicleNumber: booking.vehicleNumber || actor.vehicleNumber,
+    vehicleType: booking.vehicleType || actor.ambulance?.vehicleType || booking.ambulanceType || 'Basic Life Support (BLS)',
+    status: 'Accepted',
+    rideStatus: 'Accepted',
+    sessionStatus: 'ACTIVE',
+    visitPassStatus: 'ACTIVE',
+    acceptedAt,
+    acceptedBy: actor.user.id,
+    eta: booking.eta || req.body?.eta || '8 - 12 Minutes',
+    estimatedKm: booking.estimatedKm || estimateAmbulanceKm(booking.pickupLocation, booking.dropLocation),
+    driverNotes: req.body?.driverNotes || booking.driverNotes || 'Ambulance request accepted. Driver will coordinate with the patient.',
+  });
+  broadcast({ collection: 'ambulance_bookings', action: 'update', record: item });
+  res.json({ item: normalizeAmbulanceBooking(item) });
+});
+
+app.patch('/api/ambulance/bookings/:id/reject', requireRole(['ambulance', 'admin']), async (req, res) => {
+  const result = await assertAmbulanceBookingAccess(req, res, req.params.id, { allowUnassigned: true, allowCompleted: true });
+  if (!result) return;
+  const { actor, booking } = result;
+  const reason = String(req.body?.reason || req.body?.rejectionReason || '').trim();
+  if (reason.length < 2) return res.status(400).json({ error: 'Rejection reason is required.' });
+  if (isCompletedSession(booking)) return res.status(409).json({ error: 'Completed rides cannot be rejected.' });
+  const item = await db.update('ambulance_bookings', booking.id, {
+    driverId: booking.driverId || actor.ambulanceId,
+    ambulanceId: booking.ambulanceId || actor.ambulanceId,
+    driverName: booking.driverName || actor.ambulanceName,
+    driverContact: booking.driverContact || actor.ambulancePhone,
+    status: 'Rejected',
+    rideStatus: 'Rejected',
+    sessionStatus: 'REJECTED',
+    rejectedAt: formatDateTime(),
+    rejectedBy: actor.user.id,
+    rejectionReason: reason,
+  });
+  broadcast({ collection: 'ambulance_bookings', action: 'update', record: item });
+  res.json({ item: normalizeAmbulanceBooking(item) });
+});
+
+app.patch('/api/ambulance/bookings/:id/start', requireRole(['ambulance', 'admin']), async (req, res) => {
+  const result = await assertAmbulanceBookingAccess(req, res, req.params.id);
+  if (!result) return;
+  const { actor, booking } = result;
+  if (!['Accepted', 'Scheduled'].includes(String(booking.status || ''))) {
+    return res.status(400).json({ error: 'Only accepted rides can be started.' });
+  }
+  const item = await db.update('ambulance_bookings', booking.id, {
+    status: 'Ride Started',
+    rideStatus: 'Ride Started',
+    rideStartedAt: formatDateTime(),
+    rideStartedBy: actor.user.id,
+  });
+  broadcast({ collection: 'ambulance_bookings', action: 'update', record: item });
+  res.json({ item: normalizeAmbulanceBooking(item) });
+});
+
+app.patch('/api/ambulance/bookings/:id/complete', requireRole(['ambulance', 'admin']), async (req, res) => {
+  const result = await assertAmbulanceBookingAccess(req, res, req.params.id);
+  if (!result) return;
+  const { actor, booking } = result;
+  if (!['Accepted', 'Scheduled', 'Ride Started', 'En Route'].includes(String(booking.status || ''))) {
+    return res.status(400).json({ error: 'Only active ambulance rides can be completed.' });
+  }
+  const completedAt = formatDateTime();
+  const item = await db.update('ambulance_bookings', booking.id, {
+    status: 'Completed',
+    rideStatus: 'Completed',
+    sessionStatus: 'COMPLETED',
+    completedAt,
+    completedBy: actor.user.id,
+    completedByRole: actor.role,
+    rideCompletedAt: completedAt,
+    actualKm: req.body?.actualKm || booking.estimatedKm,
+    visitPassStatus: 'EXPIRED',
+    visitPassExpiredAt: completedAt,
+    completionNotes: req.body?.completionNotes || '',
+    historyRecorded: true,
+  });
+  broadcast({ collection: 'ambulance_bookings', action: 'update', record: item });
+  res.json({ item: normalizeAmbulanceBooking(item) });
+});
+
+app.patch('/api/ambulance/profile', requireRole(['ambulance', 'admin']), async (req, res) => {
+  try {
+    const actor = await getActor(req);
+    const patch = req.body || {};
+    const profilePatch = {
+      driverName: patch.driverName || patch.name || actor.ambulanceName,
+      name: patch.driverName || patch.name || actor.ambulanceName,
+      phone: patch.phone || patch.mobile || actor.ambulancePhone,
+      vehicleNumber: patch.vehicleNumber || actor.vehicleNumber,
+      vehicleType: patch.vehicleType || actor.ambulance?.vehicleType || 'Basic Life Support (BLS)',
+      district: patch.district || actor.ambulance?.district || 'Warangal',
+      baseLocation: patch.baseLocation || actor.ambulance?.baseLocation || '',
+      image: patch.image || actor.ambulance?.image || actor.user?.data?.image || '',
+      updatedAt: formatDateTime(),
+    };
+    let item = actor.ambulance;
+    if (item?.id) {
+      item = await db.update('partnerships', item.id, profilePatch);
+    } else {
+      item = await db.create('partnerships', {
+        id: actor.ambulanceId || makeId('AMB'),
+        ambulanceId: actor.ambulanceId || makeId('AMB'),
+        userId: actor.user.id,
+        role: 'ambulance',
+        status: 'Active',
+        verificationStatus: 'VERIFIED',
+        ...profilePatch,
+      });
+    }
+    await db.updateUser(actor.user.id, {
+      name: profilePatch.driverName,
+      phone: profilePatch.phone,
+      data: {
+        ...(actor.user.data || {}),
+        ambulanceId: item.ambulanceId || item.id,
+        driverName: profilePatch.driverName,
+        vehicleNumber: profilePatch.vehicleNumber,
+        vehicleType: profilePatch.vehicleType,
+        district: profilePatch.district,
+        baseLocation: profilePatch.baseLocation,
+        image: profilePatch.image,
+      },
+    });
+    res.json({ item });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to update ambulance profile.' });
+  }
+});
+
 app.get('/api/users', adminRequired, async (req, res) => {
   const { page, limit, ...filter } = req.query;
   const users = await db.listUsers(filter);
@@ -2873,7 +3290,7 @@ app.post('/api/records/:collection', async (req, res) => {
   if (!payload.status) {
     if (collection === 'appointments') payload.status = 'Pending';
     if (collection === 'visit_requests') payload.status = 'Pending';
-    if (collection === 'ambulance_bookings') payload.status = 'Dispatched';
+    if (collection === 'ambulance_bookings') payload.status = 'Pending';
     if (collection === 'lab_bookings') payload.status = 'Pending';
     if (collection === 'home_care_bookings') payload.status = 'Scheduled';
     if (collection === 'leads') payload.status = payload.status || 'New';
@@ -2904,9 +3321,29 @@ app.post('/api/records/:collection', async (req, res) => {
     payload.tokenNumber = payload.tokenNumber || `TK-${Math.floor(10 + Math.random() * 90)}`;
   }
   if (collection === 'ambulance_bookings') {
-    payload.driverName = payload.driverName || 'Suresh Varma (Paramedic Driver)';
-    payload.driverContact = payload.driverContact || '9000045073';
-    payload.eta = payload.eta || '8 - 12 Minutes';
+    const drivers = await getAmbulanceDrivers();
+    const requestedDriverId = String(payload.driverId || payload.ambulanceId || '').trim();
+    const driver = drivers.find((item) =>
+      String(item.ambulanceId || item.id || '') === requestedDriverId ||
+      cleanPhone(item.phone) === cleanPhone(payload.driverContact)
+    );
+    payload.requestedAt = payload.requestedAt || formatDateTime();
+    payload.sessionStatus = payload.sessionStatus || 'REQUESTED';
+    payload.visitPassStatus = payload.visitPassStatus || 'PENDING';
+    payload.rideStatus = payload.rideStatus || payload.status || 'Pending';
+    payload.requestId = payload.requestId || `AV-AMB-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    payload.estimatedKm = payload.estimatedKm || estimateAmbulanceKm(payload.pickupLocation, payload.dropLocation);
+    payload.reportStatus = payload.reportStatus || 'Not Required';
+    if (driver) {
+      payload.driverId = payload.driverId || driver.ambulanceId || driver.id;
+      payload.ambulanceId = payload.ambulanceId || driver.ambulanceId || driver.id;
+      payload.driverName = payload.driverName || driver.driverName || driver.name;
+      payload.driverContact = payload.driverContact || driver.phone;
+      payload.vehicleNumber = payload.vehicleNumber || driver.vehicleNumber;
+      payload.vehicleType = payload.vehicleType || driver.vehicleType;
+      payload.driverBaseLocation = payload.driverBaseLocation || driver.baseLocation;
+    }
+    payload.eta = payload.eta || (payload.pickupType && /immediate|emergency/i.test(payload.pickupType) ? '8 - 12 Minutes after acceptance' : 'As per scheduled pickup');
   }
   if (collection === 'wallet_txns' && payload.patientId) {
     const txs = await db.list('wallet_txns', { patientId: payload.patientId });

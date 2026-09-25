@@ -238,6 +238,34 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  ambulanceDrivers: () => request<{ items: any[] }>('/api/ambulance/drivers'),
+  ambulanceSummary: () =>
+    request<{ driver: any; stats: any; predictions: any; requests: any[]; active: any[]; upcoming: any[]; accepted: any[]; history: any[] }>('/api/ambulance/dashboard'),
+  acceptAmbulanceBooking: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/ambulance/bookings/${encodeURIComponent(id)}/accept`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  rejectAmbulanceBooking: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/ambulance/bookings/${encodeURIComponent(id)}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  startAmbulanceRide: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/ambulance/bookings/${encodeURIComponent(id)}/start`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  completeAmbulanceRide: (id: string, payload: any = {}) =>
+    request<{ item: any }>(`/api/ambulance/bookings/${encodeURIComponent(id)}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  updateAmbulanceProfile: (payload: any) =>
+    request<{ item: any }>('/api/ambulance/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
   fund360Account: () =>
     request<{
       account: any;

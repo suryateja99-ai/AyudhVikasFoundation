@@ -150,6 +150,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrors({});
   };
 
+  const handleAutoFillAmbulance = () => {
+    setIdentifier('ambulance@ayudhvikas.org');
+    setPassword('ambulance123');
+    setErrors({});
+  };
+
   const handleAutoFillAdmin = () => {
     setIdentifier('admin@ayudhvikasfoundation.org');
     setPassword('admin123');
@@ -441,6 +447,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     </div>
                     <div className="text-[9px] text-slate-500 font-medium truncate">
                       lab@ayudhvikas.org
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAutoFillAmbulance}
+                    className="bg-white hover:bg-red-50 text-slate-700 hover:text-red-900 border border-slate-200 hover:border-red-300 rounded-lg p-2.5 min-h-[58px] text-left transition-all shadow-2xs cursor-pointer group"
+                  >
+                    <div className="text-[11px] font-black text-red-900 group-hover:text-red-950 flex items-center gap-1 min-w-0">
+                      <Ambulance className="w-3 h-3 text-red-600" />
+                      <span>Ambulance</span>
+                    </div>
+                    <div className="text-[9px] text-slate-500 font-medium truncate">
+                      ambulance@ayudhvikas.org
                     </div>
                   </button>
 

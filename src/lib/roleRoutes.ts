@@ -8,7 +8,7 @@ export const ROLE_HOME: Record<string, string> = {
   marketing: '/marketing/dashboard',
   volunteer: '/community/dashboard',
   social_organizer: '/community/dashboard',
-  ambulance: '/',
+  ambulance: '/ambulance/dashboard',
   lab: '/lab/dashboard',
 };
 

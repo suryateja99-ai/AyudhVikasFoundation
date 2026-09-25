@@ -17,6 +17,7 @@ import { DoctorDashboard } from '../components/DoctorDashboard';
 import { MarketingDashboard } from '../components/MarketingDashboard';
 import { HospitalDashboard } from '../components/HospitalDashboard';
 import { LabDashboard } from '../components/LabDashboard';
+import { AmbulanceDashboard } from '../components/AmbulanceDashboard';
 import { DonationPage } from '../components/DonationPage';
 import { DonatePromoter } from '../components/DonatePromoter';
 import { RoleDonationShell } from '../components/RoleDonationShell';
@@ -604,6 +605,16 @@ export const AppRoutes: React.FC = () => {
           <Route path="/lab/history" element={<LabDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="History" />} />
           <Route path="/lab/profile" element={<LabDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Profile" />} />
           <Route path="/lab/support" element={<LabDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Support" />} />
+        </Route>
+
+        <Route element={<PrivateRoute requiredRole="ambulance" />}>
+          <Route path="/ambulance/dashboard" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Dashboard" />} />
+          <Route path="/ambulance/requests" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Requests" />} />
+          <Route path="/ambulance/upcoming" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Upcoming" />} />
+          <Route path="/ambulance/accepted" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Accepted" />} />
+          <Route path="/ambulance/history" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="History" />} />
+          <Route path="/ambulance/profile" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Profile" />} />
+          <Route path="/ambulance/support" element={<AmbulanceDashboard onLogout={handleLogout} onNavigateHome={handleBackToHome} initialNav="Support" />} />
         </Route>
 
         <Route element={<PrivateRoute requiredRole={['volunteer', 'social_organizer']} />}>

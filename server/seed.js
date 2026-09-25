@@ -234,6 +234,7 @@ export async function seedDatabase(db, hashPassword) {
   const hospitalPassword = await hashPassword('hospital123');
   const marketingPassword = await hashPassword('marketing123');
   const labPassword = await hashPassword('lab123');
+  const ambulancePassword = await hashPassword('ambulance123');
   const adminPassword = await hashPassword('admin123');
   const volunteerPassword = await hashPassword('volunteer123');
   const organizerPassword = await hashPassword('organizer123');
@@ -336,6 +337,28 @@ export async function seedDatabase(db, hashPassword) {
   });
 
   await db.createUser({
+    id: 'user-ambulance-1',
+    role: 'ambulance',
+    roles: ['ambulance'],
+    primaryRole: 'ambulance',
+    name: 'Suresh Varma',
+    email: 'ambulance@ayudhvikas.org',
+    phone: '9000045073',
+    password_hash: ambulancePassword,
+    emailVerified: true,
+    data: {
+      ambulanceId: 'AMB-DRIVER-1',
+      driverName: 'Suresh Varma',
+      vehicleNumber: 'TS09AV1088',
+      vehicleType: 'Basic Life Support (BLS)',
+      district: 'Warangal',
+      baseLocation: 'Hanamkonda Emergency Dispatch Unit',
+      image: '/src/assets/images/patient_avatar_1787229395408.jpg',
+      identifier: 'ambulance@ayudhvikas.org',
+    },
+  });
+
+  await db.createUser({
     id: 'user-admin-1',
     role: 'admin',
     roles: ['admin'],
@@ -414,6 +437,28 @@ export async function seedDatabase(db, hashPassword) {
     verificationStatus: 'VERIFIED',
   });
 
+  await db.create('partnerships', {
+    id: 'AMB-DRIVER-1',
+    userId: 'user-ambulance-1',
+    role: 'ambulance',
+    ambulanceId: 'AMB-DRIVER-1',
+    name: 'Suresh Varma',
+    driverName: 'Suresh Varma',
+    licenseNumber: 'TS-WGL-AMB-2026-1188',
+    vehicleNumber: 'TS09AV1088',
+    vehicleType: 'Basic Life Support (BLS)',
+    phone: '9000045073',
+    email: 'ambulance@ayudhvikas.org',
+    district: 'Warangal',
+    baseLocation: 'Hanamkonda Emergency Dispatch Unit',
+    address: 'Ayudh Vikas Health Care Network, Hanamkonda',
+    image: '/src/assets/images/patient_avatar_1787229395408.jpg',
+    acceptedRides: 18,
+    completedRides: 15,
+    status: 'Active',
+    verificationStatus: 'VERIFIED',
+  });
+
   await db.create('patients', {
     id: 'AVP100245',
     userId: 'user-patient-1',
@@ -440,6 +485,104 @@ export async function seedDatabase(db, hashPassword) {
     image: '/src/assets/images/support_agent_female_1785560510481.jpg',
     membershipTier: 'Silver Health Care Member',
   });
+
+  const ambulanceBookingSeeds = [
+    {
+      id: 'AMB-REQ-101',
+      requestId: 'AV-AMB-2026-4101',
+      patientId: 'AVP100245',
+      patientName: 'Ramesh Kumar',
+      patientAge: 42,
+      gender: 'Male',
+      phone: '9876543210',
+      pickupLocation: 'Subedari, Hanamkonda, Warangal',
+      dropLocation: 'KIMS Hospitals Emergency Gate, Hunter Road',
+      pickupType: 'Immediate / Emergency',
+      preferredDate: '2026-09-24',
+      preferredTime: 'Immediate',
+      patientCondition: 'Breathlessness and mild chest discomfort',
+      medicalSupportNeeded: 'Oxygen Support',
+      ambulanceType: 'Basic Life Support (BLS)',
+      driverId: 'AMB-DRIVER-1',
+      ambulanceId: 'AMB-DRIVER-1',
+      driverName: 'Suresh Varma',
+      driverContact: '9000045073',
+      vehicleNumber: 'TS09AV1088',
+      vehicleType: 'Basic Life Support (BLS)',
+      estimatedKm: 8,
+      status: 'Pending',
+      rideStatus: 'Pending',
+      sessionStatus: 'REQUESTED',
+      visitPassStatus: 'PENDING',
+      requestedAt: '2026-09-24T04:30:00.000Z',
+    },
+    {
+      id: 'AMB-REQ-102',
+      requestId: 'AV-AMB-2026-4102',
+      patientId: 'AV-2024-9021',
+      patientName: 'Lakshmi Devi',
+      patientAge: 48,
+      gender: 'Female',
+      phone: '9440123456',
+      pickupLocation: 'Naimnagar, Warangal',
+      dropLocation: 'Yashoda Hospitals, Subedari',
+      pickupType: 'Scheduled Transfer',
+      preferredDate: '2026-09-25',
+      preferredTime: '10:30 AM',
+      patientCondition: 'Stable / Non-Critical',
+      medicalSupportNeeded: 'Wheelchair Support',
+      ambulanceType: 'Basic Life Support (BLS)',
+      driverId: 'AMB-DRIVER-1',
+      ambulanceId: 'AMB-DRIVER-1',
+      driverName: 'Suresh Varma',
+      driverContact: '9000045073',
+      vehicleNumber: 'TS09AV1088',
+      vehicleType: 'Basic Life Support (BLS)',
+      estimatedKm: 12,
+      status: 'Accepted',
+      rideStatus: 'Accepted',
+      sessionStatus: 'ACTIVE',
+      visitPassStatus: 'ACTIVE',
+      requestedAt: '2026-09-23T10:20:00.000Z',
+      acceptedAt: '2026-09-23T10:25:00.000Z',
+    },
+    {
+      id: 'AMB-REQ-103',
+      requestId: 'AV-AMB-2026-4103',
+      patientId: 'AVP100245',
+      patientName: 'Ramesh Kumar',
+      patientAge: 42,
+      gender: 'Male',
+      phone: '9876543210',
+      pickupLocation: 'Kazipet Railway Station',
+      dropLocation: 'MGM Hospital, Warangal',
+      pickupType: 'Immediate / Emergency',
+      preferredDate: '2026-09-18',
+      preferredTime: '07:20 PM',
+      patientCondition: 'Stable after first-aid',
+      medicalSupportNeeded: 'Paramedic Support',
+      ambulanceType: 'Advanced Life Support (ALS ICU)',
+      driverId: 'AMB-DRIVER-1',
+      ambulanceId: 'AMB-DRIVER-1',
+      driverName: 'Suresh Varma',
+      driverContact: '9000045073',
+      vehicleNumber: 'TS09AV1088',
+      vehicleType: 'Basic Life Support (BLS)',
+      estimatedKm: 15,
+      actualKm: 16,
+      status: 'Completed',
+      rideStatus: 'Completed',
+      sessionStatus: 'COMPLETED',
+      visitPassStatus: 'EXPIRED',
+      requestedAt: '2026-09-18T13:30:00.000Z',
+      acceptedAt: '2026-09-18T13:35:00.000Z',
+      completedAt: '2026-09-18T14:10:00.000Z',
+      visitPassExpiredAt: '2026-09-18T14:10:00.000Z',
+    },
+  ];
+  for (const booking of ambulanceBookingSeeds) {
+    await db.create('ambulance_bookings', booking);
+  }
 
   await db.create('visit_requests', {
     id: 'HVR-101',

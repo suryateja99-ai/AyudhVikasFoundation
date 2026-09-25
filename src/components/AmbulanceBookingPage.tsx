@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   HeartPulse, 
   Phone, 
@@ -25,12 +25,23 @@ import {
   Check,
   Building2,
   Navigation,
-  FileCheck
+  FileCheck,
+  Search,
+  Star
 } from 'lucide-react';
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
+import { api } from '../lib/api';
+
+const DRIVER_FALLBACK_IMAGE = '/src/assets/images/patient_avatar_1787229395408.jpg';
+
+const driverImage = (driver: any) => {
+  const image = String(driver?.image || '').trim();
+  if (!image || image.includes('support_agent_male_1785560404261')) return DRIVER_FALLBACK_IMAGE;
+  return image;
+};
 
 interface AmbulanceBookingPageProps {
   onBackToHome: () => void;
@@ -89,6 +100,12 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
   const [patientCondition, setPatientCondition] = useState('Stable / Non-Critical');
   const [medicalSupportNeeded, setMedicalSupportNeeded] = useState('Oxygen Support');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [ambulanceDrivers, setAmbulanceDrivers] = useState<any[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState('');
+  const [driversLoading, setDriversLoading] = useState(true);
+  const [driversError, setDriversError] = useState('');
+  const [driverSearch, setDriverSearch] = useState('');
+  const [visibleDriverCount, setVisibleDriverCount] = useState(8);
 
   // Dropdown states & UI states
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -103,6 +120,49 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
     driverName?: string;
     eta?: string;
   }>({ open: false });
+
+  useEffect(() => {
+    let active = true;
+    setDriversLoading(true);
+    setDriversError('');
+    api.ambulanceDrivers()
+      .then((data) => {
+        if (!active) return;
+        const items = data.items || [];
+        setAmbulanceDrivers(items);
+        setSelectedDriverId((current) => current || items[0]?.ambulanceId || items[0]?.id || '');
+      })
+      .catch((err: Error) => {
+        if (active) setDriversError(err.message || 'Unable to load ambulance riders.');
+      })
+      .finally(() => {
+        if (active) setDriversLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const normalizedAmbulanceType =
+    selectedAmbulanceType === 'BLS' ? 'Basic Life Support (BLS)' :
+    selectedAmbulanceType === 'ALS' ? 'Advanced Life Support (ALS ICU)' : 'Neonatal Ambulance';
+
+  const filteredDrivers = ambulanceDrivers
+    .filter((driver) => {
+      const haystack = `${driver.driverName || driver.name || ''} ${driver.vehicleNumber || ''} ${driver.vehicleType || ''} ${driver.baseLocation || ''} ${driver.district || ''} ${driver.phone || ''}`.toLowerCase();
+      return haystack.includes(driverSearch.toLowerCase().trim());
+    })
+    .sort((a, b) => {
+      const aTypeMatch = String(a.vehicleType || '').toLowerCase().includes(selectedAmbulanceType.toLowerCase()) ? 1 : 0;
+      const bTypeMatch = String(b.vehicleType || '').toLowerCase().includes(selectedAmbulanceType.toLowerCase()) ? 1 : 0;
+      return (bTypeMatch - aTypeMatch) ||
+        Number(b.completedRides || 0) - Number(a.completedRides || 0) ||
+        Number(b.acceptedRides || 0) - Number(a.acceptedRides || 0);
+    });
+
+  const selectedDriver = ambulanceDrivers.find((driver) => String(driver.ambulanceId || driver.id) === String(selectedDriverId));
+  const recommendedDriver = selectedDriver || filteredDrivers[0] || ambulanceDrivers[0];
+  const visibleDrivers = filteredDrivers.slice(0, visibleDriverCount);
 
   // Handle GPS location detection
   const handleDetectLocation = (type: 'pickup' | 'drop') => {
@@ -148,6 +208,7 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
     setPatientCondition('Stable / Non-Critical');
     setMedicalSupportNeeded('');
     setAdditionalNotes('');
+    setSelectedDriverId(ambulanceDrivers[0]?.ambulanceId || ambulanceDrivers[0]?.id || '');
   };
 
   // Submit ambulance booking
@@ -157,9 +218,8 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
       onOpenModal('register_patient');
       return;
     }
-    const typeLabel = 
-      selectedAmbulanceType === 'BLS' ? 'Basic Life Support (BLS)' :
-      selectedAmbulanceType === 'ALS' ? 'Advanced Life Support (ALS ICU)' : 'Neonatal Ambulance';
+    const typeLabel = normalizedAmbulanceType;
+    const selectedDriver = ambulanceDrivers.find((driver) => String(driver.ambulanceId || driver.id) === String(selectedDriverId));
 
     const created = await create('ambulance_bookings', {
       patientName,
@@ -178,7 +238,14 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
       additionalNotes,
       ambulanceType: typeLabel,
       patientId: userProfile.patientId,
-      status: 'Dispatched',
+      driverId: selectedDriver?.ambulanceId || selectedDriver?.id || '',
+      ambulanceId: selectedDriver?.ambulanceId || selectedDriver?.id || '',
+      driverName: selectedDriver?.driverName || selectedDriver?.name || '',
+      driverContact: selectedDriver?.phone || '',
+      vehicleNumber: selectedDriver?.vehicleNumber || '',
+      vehicleType: selectedDriver?.vehicleType || typeLabel,
+      driverBaseLocation: selectedDriver?.baseLocation || '',
+      status: 'Pending',
     });
 
     setBookingSuccessModal({
@@ -187,9 +254,9 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
       ambulanceType: typeLabel,
       pickupLocation: pickupLocation || 'Subedari, Hanamkonda',
       dropLocation: dropLocation || 'MGM Hospital Emergency Ward',
-      driverName: created.driverName || 'Suresh Varma (Paramedic Driver)',
-      driverContact: created.driverContact || '9000045073',
-      eta: created.eta || '8 - 12 Minutes'
+      driverName: created.driverName || selectedDriver?.driverName || selectedDriver?.name || 'Ambulance rider',
+      driverContact: created.driverContact || selectedDriver?.phone || '08704210820',
+      eta: created.eta || 'After driver acceptance'
     });
   };
 
@@ -898,6 +965,133 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
                 </div>
               </div>
 
+              {/* ROW 6: Ambulance Rider Selection */}
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">Available Ambulance Riders</label>
+                    <p className="text-[11px] font-semibold text-slate-500">
+                      Ranked by completed rides, accepted rides, vehicle match and location. Search when the fleet is large.
+                    </p>
+                  </div>
+                  <div className="relative w-full lg:w-72">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={driverSearch}
+                      onChange={(e) => {
+                        setDriverSearch(e.target.value);
+                        setVisibleDriverCount(8);
+                      }}
+                      placeholder="Search rider, vehicle, location"
+                      className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+                {driversLoading && <span className="text-[11px] font-black text-slate-500">Loading ambulance riders...</span>}
+                {driversError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700">
+                    {driversError}
+                  </div>
+                )}
+                {!driversLoading && !driversError && (
+                  <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-3">
+                    <div className="rounded-xl border border-emerald-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
+                          <Star className="w-3 h-3" />
+                          Selected / Recommended
+                        </span>
+                        <span className="text-[10px] font-black text-slate-500">{ambulanceDrivers.length} riders</span>
+                      </div>
+                      {recommendedDriver ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDriverId(recommendedDriver.ambulanceId || recommendedDriver.id)}
+                          className="mt-3 w-full text-left rounded-lg border border-emerald-300 bg-emerald-50/60 p-3 hover:bg-emerald-50 transition-all"
+                        >
+                          <div className="flex gap-3">
+                            <img
+                              src={driverImage(recommendedDriver)}
+                              alt={recommendedDriver.driverName || recommendedDriver.name || 'Ambulance rider'}
+                              className="w-14 h-14 rounded-xl object-contain bg-slate-100 border border-white shadow-sm"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-black text-slate-950 truncate">{recommendedDriver.driverName || recommendedDriver.name}</h4>
+                              <p className="text-[11px] font-semibold text-slate-600 truncate">{recommendedDriver.vehicleType || normalizedAmbulanceType}</p>
+                              <p className="text-[11px] font-black text-emerald-700 mt-1">{recommendedDriver.vehicleNumber || 'Fleet vehicle'} • {recommendedDriver.baseLocation || recommendedDriver.district || 'Ayudh Vikas Dispatch'}</p>
+                              <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                                {recommendedDriver.completedRides || 0} completed, {recommendedDriver.acceptedRides || 0} accepted
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="mt-3 rounded-lg border border-dashed border-slate-300 p-4 text-xs font-bold text-slate-500">
+                          No rider selected. Dispatch support can assign one after request submission.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                        <span className="text-[11px] font-black text-slate-700">Ranked Riders</span>
+                        <span className="text-[10px] font-bold text-slate-500">Showing {Math.min(visibleDrivers.length, filteredDrivers.length)} of {filteredDrivers.length}</span>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                        {visibleDrivers.map((driver) => {
+                          const driverId = driver.ambulanceId || driver.id;
+                          const selected = String(selectedDriverId) === String(driverId);
+                          return (
+                            <button
+                              type="button"
+                              key={driverId}
+                              onClick={() => setSelectedDriverId(driverId)}
+                              className={`w-full text-left p-3 transition-all ${
+                                selected ? 'bg-emerald-50' : 'bg-white hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={driverImage(driver)}
+                                  alt={driver.driverName || driver.name || 'Ambulance rider'}
+                                  className="w-11 h-11 rounded-lg object-contain bg-slate-100 border border-slate-200"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h4 className="text-xs font-black text-slate-950 truncate">{driver.driverName || driver.name}</h4>
+                                    {selected && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                  </div>
+                                  <p className="text-[11px] font-semibold text-slate-500 truncate">{driver.vehicleType || 'BLS'} - {driver.vehicleNumber || 'Fleet vehicle'}</p>
+                                  <p className="text-[10px] font-bold text-slate-500 truncate">{driver.baseLocation || driver.district || 'Ayudh Vikas Dispatch'} - {driver.phone || 'No phone'}</p>
+                                </div>
+                                <div className="hidden sm:block text-right shrink-0">
+                                  <p className="text-xs font-black text-emerald-700">{driver.completedRides || 0}</p>
+                                  <p className="text-[9px] font-black text-slate-400 uppercase">completed</p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {!filteredDrivers.length && (
+                          <div className="p-5 text-center text-xs font-bold text-slate-500">
+                            No rider matched your search. Clear search or submit for dispatch assignment.
+                          </div>
+                        )}
+                      </div>
+                      {filteredDrivers.length > visibleDriverCount && (
+                        <button
+                          type="button"
+                          onClick={() => setVisibleDriverCount((count) => count + 8)}
+                          className="w-full border-t border-slate-100 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-50"
+                        >
+                          Show 8 more riders
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* ACTION BUTTONS: BOOK AMBULANCE NOW + RESET FORM */}
               <div className="pt-3 grid grid-cols-1 sm:grid-cols-12 gap-3">
                 <button
@@ -1331,10 +1525,10 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
                 <FileCheck className="w-7 h-7" />
               </div>
               <span className="bg-red-100 text-red-700 text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
-                Emergency Dispatch Assigned
+                Request Sent To Ambulance Rider
               </span>
               <h3 className="text-xl font-black text-slate-900">
-                Ambulance Booked Successfully!
+                Ambulance Request Submitted
               </h3>
               <p className="text-xs text-slate-500">
                 Booking Reference ID: <span className="font-black text-[#0f2e5a]">{bookingSuccessModal.bookingId}</span>
@@ -1355,11 +1549,11 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
                 <span className="font-black text-slate-800 max-w-[240px] text-right truncate">{bookingSuccessModal.dropLocation}</span>
               </div>
               <div className="flex justify-between pb-1.5 border-b border-slate-200">
-                <span className="text-slate-500 font-medium">Assigned Driver:</span>
+                <span className="text-slate-500 font-medium">Requested Rider:</span>
                 <span className="font-bold text-slate-800">{bookingSuccessModal.driverName}</span>
               </div>
               <div className="flex justify-between text-emerald-700 font-black">
-                <span>Estimated Arrival Time:</span>
+                <span>ETA Status:</span>
                 <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-xs">
                   {bookingSuccessModal.eta}
                 </span>
@@ -1372,7 +1566,7 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
                 className="flex-1 bg-[#00703c] hover:bg-[#005830] text-white py-3 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2 shadow-sm"
               >
                 <PhoneCall className="w-4 h-4" />
-                <span>Call Driver Now</span>
+                <span>Call Rider</span>
               </a>
               <button
                 onClick={() => setBookingSuccessModal({ open: false })}

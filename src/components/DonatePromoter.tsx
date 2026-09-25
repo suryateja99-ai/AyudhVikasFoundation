@@ -56,6 +56,7 @@ export const DonatePromoter: React.FC<DonatePromoterProps> = ({ activeModal }) =
   const line = lines[seed % lines.length];
   const variant = location.pathname === '/login' ? 'login' : seed % 6 === 0 ? 'banner' : seed % 7 === 0 ? 'rail' : 'quiet';
   const popupEligible = !disabled && location.pathname !== '/' && location.pathname !== '/login' && seed % 11 === 0;
+  const isDashboardPath = /^\/(dashboard|patient|doctor|hospital|lab|ambulance|marketing|admin|community|fund360)(\/|$)/.test(location.pathname);
 
   useEffect(() => {
     setClosed(false);
@@ -129,7 +130,9 @@ export const DonatePromoter: React.FC<DonatePromoterProps> = ({ activeModal }) =
       {variant === 'quiet' && (
         <button
           onClick={openDonate}
-          className="fixed left-4 bottom-5 z-40 rounded-full bg-white border border-emerald-200 shadow-xl px-4 py-3 text-emerald-800 text-xs font-black flex items-center gap-2 hover:bg-emerald-50"
+          className={`fixed bottom-5 z-40 rounded-full bg-white border border-emerald-200 shadow-xl px-4 py-3 text-emerald-800 text-xs font-black flex items-center gap-2 hover:bg-emerald-50 ${
+            isDashboardPath ? 'right-4' : 'left-4'
+          }`}
         >
           <HeartHandshake className="w-4 h-4" />
           Donate

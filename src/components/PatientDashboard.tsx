@@ -607,13 +607,13 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
 
         {/* LEFT SIDEBAR NAVIGATION (PERSISTENT ON ALL PAGES) */}
         <aside className={`
-          fixed lg:sticky top-[60px] bottom-0 left-0 z-30
+          fixed lg:sticky top-[60px] bottom-0 left-0 z-40
           w-64 bg-[#091b38] text-slate-300 flex flex-col justify-between shrink-0
           transition-transform duration-200 ease-in-out overflow-hidden
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           shadow-xl lg:shadow-none h-[calc(100vh-60px)] max-h-[calc(100vh-60px)]
         `}>
-          <div className="p-3 space-y-1 flex-1 overflow-y-auto min-h-0">
+          <div className="p-3 pb-4 space-y-1 flex-1 overflow-y-auto min-h-0">
             {sidebarMenuItems.map((item) => {
               const IconComp = item.icon;
               const isActive = activeSidebarTab === item.id;
@@ -643,12 +643,12 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           </div>
 
           {/* Bottom Logout Button */}
-          <div className="p-3 border-t border-slate-800/80 shrink-0 bg-[#091b38]">
+          <div className="p-3 pb-4 border-t border-slate-700/80 shrink-0 bg-[#07172f] shadow-[0_-10px_24px_rgba(2,6,23,0.35)]">
             <button
               onClick={onLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-400 hover:text-red-400 hover:bg-red-950/30 transition-all text-left cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs font-black text-white bg-red-600 hover:bg-red-700 transition-all cursor-pointer shadow-sm"
             >
-              <LogOut className="w-4 h-4 text-slate-400" />
+              <LogOut className="w-4 h-4 text-white" />
               <span>Logout</span>
             </button>
           </div>
