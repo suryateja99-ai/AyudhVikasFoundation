@@ -55,6 +55,8 @@ interface AmbulanceBookingPageProps {
     image: string;
     phone?: string;
     email?: string;
+    age?: string | number;
+    gender?: string;
   };
   onNavigateDashboard?: () => void;
   onLogout?: () => void;
@@ -68,12 +70,14 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
   onSignInClick,
   isLoggedIn = false,
   userProfile = {
-    name: 'Ramesh Kumar',
-    displayName: 'Ramesh K.',
-    patientId: 'AVP100245',
-    phone: '9876543210',
-    email: 'ramesh.kumar@example.com',
-    image: '/src/assets/images/patient_avatar_1787229395408.jpg'
+    name: '',
+    displayName: '',
+    patientId: '',
+    phone: '',
+    email: '',
+    age: '',
+    gender: '',
+    image: ''
   },
   onNavigateDashboard,
   onLogout,
@@ -87,15 +91,15 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
 
   // Form State
   const [patientName, setPatientName] = useState(isLoggedIn ? userProfile.name : '');
-  const [patientAge, setPatientAge] = useState(isLoggedIn ? '42' : '');
-  const [gender, setGender] = useState(isLoggedIn ? 'Male' : '');
-  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '9876543210' : '');
+  const [patientAge, setPatientAge] = useState(isLoggedIn && userProfile.age ? String(userProfile.age) : '');
+  const [gender, setGender] = useState(isLoggedIn ? (userProfile.gender || '') : '');
+  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '' : '');
   const [alternateNumber, setAlternateNumber] = useState('');
   const [numberOfPatients, setNumberOfPatients] = useState('1');
-  const [pickupLocation, setPickupLocation] = useState('Subedari, Hanamkonda, Warangal');
-  const [dropLocation, setDropLocation] = useState('MGM Hospital, Warangal');
+  const [pickupLocation, setPickupLocation] = useState('');
+  const [dropLocation, setDropLocation] = useState('');
   const [pickupType, setPickupType] = useState('Immediate / Emergency');
-  const [preferredDate, setPreferredDate] = useState('2026-08-20');
+  const [preferredDate, setPreferredDate] = useState(new Date().toISOString().slice(0, 10));
   const [preferredTime, setPreferredTime] = useState('Immediate');
   const [patientCondition, setPatientCondition] = useState('Stable / Non-Critical');
   const [medicalSupportNeeded, setMedicalSupportNeeded] = useState('Oxygen Support');
@@ -171,22 +175,22 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
       navigator.geolocation.getCurrentPosition(
         () => {
           if (type === 'pickup') {
-            setPickupLocation('Current Location: Hanamkonda Main Road, Warangal (GPS Active)');
+            setPickupLocation('Current GPS location');
           } else {
-            setDropLocation('Near MGM Hospital Emergency Ward, Warangal');
+            setDropLocation('Current GPS location');
           }
           setIsDetectingLocation(false);
         },
         () => {
           if (type === 'pickup') {
-            setPickupLocation('Subedari, Hanamkonda, Warangal (GPS Detected)');
+            setPickupLocation('');
           }
           setIsDetectingLocation(false);
         },
         { timeout: 3000 }
       );
     } else {
-      setPickupLocation('Subedari, Hanamkonda, Warangal');
+      setPickupLocation('');
       setIsDetectingLocation(false);
     }
   };
@@ -203,7 +207,7 @@ export const AmbulanceBookingPage: React.FC<AmbulanceBookingPageProps> = ({
     setPickupLocation('');
     setDropLocation('');
     setPickupType('Immediate / Emergency');
-    setPreferredDate('2026-08-20');
+    setPreferredDate(new Date().toISOString().slice(0, 10));
     setPreferredTime('Immediate');
     setPatientCondition('Stable / Non-Critical');
     setMedicalSupportNeeded('');

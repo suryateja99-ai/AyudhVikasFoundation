@@ -134,7 +134,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   const [newCampDate, setNewCampDate] = useState('2024-05-28');
 
   const [notificationAudience, setNotificationAudience] = useState('All Users');
+  const [notificationTitle, setNotificationTitle] = useState('Ayudh Vikas Foundation');
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationSending, setNotificationSending] = useState(false);
 
   // Hover state for interactive chart tooltip
   const [hoveredDataPoint, setHoveredDataPoint] = useState<{ day: string; visits: number; completed: number; upcoming: number } | null>({
@@ -2307,11 +2309,21 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   onChange={(e) => setNotificationAudience(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-amber-600 font-medium cursor-pointer"
                 >
-                  <option value="All Users">All Registered Users (12,458)</option>
-                  <option value="Doctors">All Network Doctors (1,245)</option>
-                  <option value="Hospitals">Partner Hospital Staff (345)</option>
-                  <option value="Rural Patients">Rural Ayush Card Holders</option>
+                  <option value="All Users">All registered users</option>
+                  <option value="Patients">Patients</option>
+                  <option value="Doctors">Doctors</option>
+                  <option value="Hospitals">Hospital staff</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Title</label>
+                <input
+                  value={notificationTitle}
+                  onChange={(e) => setNotificationTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-amber-600 font-medium"
+                  placeholder="Promotional notification title"
+                />
               </div>
 
               <div>
@@ -2334,14 +2346,28 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setShowSendNotificationModal(false);
-                  showToast(`Broadcast sent to ${notificationAudience}!`);
-                  setNotificationMessage('');
+                disabled={notificationSending || !notificationMessage.trim()}
+                onClick={async () => {
+                  setNotificationSending(true);
+                  try {
+                    const res = await api.broadcastNotification({
+                      title: notificationTitle || 'Ayudh Vikas Foundation',
+                      message: notificationMessage,
+                      audience: notificationAudience,
+                      type: 'promotional',
+                    });
+                    setShowSendNotificationModal(false);
+                    showToast(`Sent to ${res.recipients} users (${res.pushSent} device pushes).`);
+                    setNotificationMessage('');
+                  } catch (err: any) {
+                    showToast(err.message || 'Unable to send broadcast.');
+                  } finally {
+                    setNotificationSending(false);
+                  }
                 }}
-                className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-black px-4 py-1.5 rounded-lg shadow-2xs cursor-pointer"
+                className="bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-xs font-black px-4 py-1.5 rounded-lg shadow-2xs cursor-pointer"
               >
-                Send Broadcast
+                {notificationSending ? 'Sending...' : 'Send Broadcast'}
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Phone, 
   User, 
@@ -33,6 +33,8 @@ import { ActiveModal } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
 import { Link } from 'react-router-dom';
+import { api } from '../lib/api';
+import { MOBILE_OTP_ENABLED } from '../lib/featureFlags';
 
 interface LoginPageProps {
   onBackToHome: () => void;
@@ -47,15 +49,30 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onRegisterClick,
   onLoginSuccess
 }) => {
-  const { login, loginAsGuest } = useAuth();
+  const { login, loginWithOtp, loginAsGuest } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpRequestId, setOtpRequestId] = useState('');
+  const [otpTimer, setOtpTimer] = useState(0);
+  const [otpHint, setOtpHint] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [patientOtpStep, setPatientOtpStep] = useState(false);
+  const [challengePhone, setChallengePhone] = useState('');
   
   // Validation error states
-  const [errors, setErrors] = useState<{ identifier?: string; password?: string; general?: string }>({});
+  const [errors, setErrors] = useState<{ identifier?: string; password?: string; otp?: string; general?: string }>({});
   const [touched, setTouched] = useState<{ identifier?: boolean; password?: boolean }>({});
+
+  useEffect(() => {
+    if (otpTimer <= 0) return;
+    const id = window.setTimeout(() => setOtpTimer((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(id);
+  }, [otpTimer]);
 
   // Validation function
   const validateForm = () => {
@@ -84,10 +101,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       }
     }
 
-    if (!password) {
-      newErrors.password = 'Please enter your password.';
-    } else if (password.length < 4) {
-      newErrors.password = 'Password must be at least 4 characters.';
+    if (!patientOtpStep) {
+      if (!password) {
+        newErrors.password = 'Please enter your password.';
+      } else if (password.length < 4) {
+        newErrors.password = 'Password must be at least 4 characters.';
+      }
     }
 
     setErrors(newErrors);
@@ -106,9 +125,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setIsSubmitting(true);
 
     login(identifier, password)
-      .then((user) => {
-        if (onLoginSuccess) {
-          onLoginSuccess(user.role);
+      .then((result) => {
+        if (MOBILE_OTP_ENABLED && 'requiresOtp' in result && result.requiresOtp) {
+          setPatientOtpStep(true);
+          setOtpSent(true);
+          setOtpRequestId(result.requestId || '');
+          setChallengePhone(result.phone || identifier.replace(/\D/g, ''));
+          setOtpTimer(result.retryAfterSeconds || 30);
+          setOtpHint(result.devOtp ? `Development OTP: ${result.devOtp}` : (result.message || `OTP sent to ${result.phoneHint || 'your mobile'}.`));
+          return;
+        }
+        if (onLoginSuccess && 'role' in result) {
+          onLoginSuccess(result.role);
         }
       })
       .catch((err: Error) => {
@@ -119,9 +147,52 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       });
   };
 
+  const handleSendLoginOtp = async () => {
+    const phone = (challengePhone || identifier).replace(/\D/g, '');
+    if (phone.length !== 10) {
+      setErrors({ otp: 'Unable to resend OTP. Please sign in with credentials again.' });
+      return;
+    }
+    setOtpLoading(true);
+    setErrors({});
+    try {
+      const res = await api.sendMobileOtp({ phone, purpose: 'login' });
+      setOtpSent(true);
+      setOtpRequestId(res.requestId);
+      setOtpTimer(res.retryAfterSeconds || 30);
+      setOtpHint(res.devOtp ? `Development OTP: ${res.devOtp}` : (res.message || 'OTP sent to your mobile.'));
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Unable to send OTP.' });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOtpLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const phone = (challengePhone || identifier).replace(/\D/g, '');
+    if (phone.length !== 10) {
+      setErrors({ otp: 'OTP session expired. Please sign in with your credentials again.' });
+      return;
+    }
+    if (otpValue.replace(/\D/g, '').length !== 6) {
+      setErrors({ otp: 'Enter the 6-digit OTP sent to your mobile.' });
+      return;
+    }
+    setIsSubmitting(true);
+    loginWithOtp(phone, otpValue, otpRequestId, rememberMe)
+      .then((user) => {
+        if (onLoginSuccess) onLoginSuccess(user.role);
+      })
+      .catch((err: Error) => {
+        setErrors({ general: err.message || 'OTP verification failed.' });
+      })
+      .finally(() => setIsSubmitting(false));
+  };
+
   // Demo autofill quick helpers
   const handleAutoFillPatient = () => {
-    setIdentifier('9876543210');
+    setIdentifier('8367253903');
     setPassword('patient123');
     setErrors({});
   };
@@ -390,7 +461,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       <span>Patient</span>
                     </div>
                     <div className="text-[9px] text-slate-500 font-medium truncate">
-                      9876543210
+                      8367253903
                     </div>
                   </button>
 
@@ -531,11 +602,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 </div>
               )}
 
+              {MOBILE_OTP_ENABLED && otpHint && patientOtpStep && (
+                <p className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  {otpHint}
+                </p>
+              )}
+
               {/* Single Universal Login Form */}
-              <form onSubmit={handleLogin} className="space-y-3.5 pt-1" noValidate>
+              <form onSubmit={MOBILE_OTP_ENABLED && patientOtpStep ? handleOtpLogin : handleLogin} className="space-y-3.5 pt-1" noValidate>
                 
                 {/* Identifier Field (Mobile Number / Email ID / Doctor ID) */}
-                <div className="space-y-1">
+                <div className={`space-y-1 ${MOBILE_OTP_ENABLED && patientOtpStep ? 'hidden' : ''}`}>
                   <label className="block text-xs font-bold text-slate-700">
                     Mobile Number / Email ID / Doctor ID
                   </label>
@@ -572,8 +649,60 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   )}
                 </div>
 
+                {MOBILE_OTP_ENABLED && patientOtpStep && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-600">
+                      Enter the 6-digit OTP sent to your registered mobile to finish signing in.
+                    </p>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700">6-digit OTP</label>
+                      <input
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otpValue}
+                        onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="Enter OTP"
+                        className="w-full px-3 py-2.5 bg-slate-50/70 border border-slate-300 rounded-lg text-xs font-medium tracking-[0.4em] text-center"
+                      />
+                      {errors.otp && <p className="text-[10.5px] font-semibold text-red-600">{errors.otp}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={otpLoading || otpTimer > 0}
+                      onClick={handleSendLoginOtp}
+                      className="w-full h-10 rounded-lg border border-emerald-600 text-emerald-800 text-xs font-black uppercase disabled:opacity-60"
+                    >
+                      {otpLoading ? 'Sending OTP...' : otpTimer > 0 ? `Resend in ${otpTimer}s` : 'Resend OTP'}
+                    </button>
+                    <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="block text-xs font-black text-slate-800">Remember me</span>
+                        <span className="block text-[10.5px] font-semibold text-slate-500">Keep me signed in on this browser until I log out.</span>
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPatientOtpStep(false);
+                        setOtpValue('');
+                        setOtpHint('');
+                        setErrors({});
+                      }}
+                      className="text-xs font-bold text-[#0066cc] hover:underline"
+                    >
+                      Back to credentials
+                    </button>
+                  </div>
+                )}
+
                 {/* Password Field */}
-                <div className="space-y-1">
+                <div className={`space-y-1 ${MOBILE_OTP_ENABLED && patientOtpStep ? 'hidden' : ''}`}>
                   <label className="block text-xs font-bold text-slate-700">
                     Password
                   </label>
@@ -636,7 +765,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   disabled={isSubmitting}
                   className="w-full bg-[#152e4d] hover:bg-[#0f2238] active:bg-[#0a1727] text-white font-black text-xs uppercase py-3 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
-                  <span>{isSubmitting ? 'Verifying & Signing In...' : 'SIGN IN'}</span>
+                  <span>{isSubmitting ? 'Please wait...' : MOBILE_OTP_ENABLED && patientOtpStep ? 'Verify OTP & Sign in' : 'SIGN IN'}</span>
                   <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center">
                     <ArrowRight className="w-3 h-3 text-white" />
                   </div>

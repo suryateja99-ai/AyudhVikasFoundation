@@ -25,9 +25,11 @@ import {
   sendVerificationRejectedEmail,
   sendAppointmentConfirmationEmail,
 } from './email.js';
-import { createNotification, notifyAppointmentConfirmed, notifyUsersByHospital, qrCodeUrl } from './notifications.js';
+import { createNotification, notifyAppointmentConfirmed, notifyDoctorById, notifyPatientRecord, notifyUsersByHospital, notifyUsersByRole, qrCodeUrl } from './notifications.js';
+import { pushConfigured, removePushSubscription, savePushSubscription, sendPushToAudience, vapidPublicKey } from './push.js';
 import { migrateToNewSchema } from './migrations.js';
 import { searchHospitals, searchDoctors } from './search.js';
+import { sendSMS, smsProviderStatus } from './sms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +38,14 @@ const ACCESS_TOKEN_TTL_SEC = Number(process.env.ACCESS_TOKEN_TTL_SEC || 15 * 60)
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30);
 const REFRESH_COOKIE_NAME = process.env.REFRESH_COOKIE_NAME || 'avf_refresh';
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER || process.env.VERCEL;
+const OTP_TTL_MS = Number(process.env.OTP_TTL_SECONDS || 5 * 60) * 1000;
+const OTP_PROOF_TTL_MS = Number(process.env.OTP_PROOF_TTL_SECONDS || 15 * 60) * 1000;
+const OTP_RESEND_COOLDOWN_MS = Number(process.env.OTP_RESEND_COOLDOWN_SECONDS || 30) * 1000;
+const OTP_MAX_SENDS_PER_HOUR = Number(process.env.OTP_MAX_SENDS_PER_HOUR || 5);
+const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
+const OTP_SECRET = process.env.OTP_SECRET || process.env.JWT_SECRET || (isProduction ? '' : 'ayudh-vikas-dev-otp-secret');
+// Set true to restore patient login/registration OTP + Remember me.
+const MOBILE_OTP_ENABLED = String(process.env.MOBILE_OTP_ENABLED || '').toLowerCase() === 'true';
 
 const app = express();
 const server = http.createServer(app);
@@ -193,15 +203,15 @@ function clientIp(req) {
   return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
 }
 
-function setRefreshCookie(res, token) {
+function setRefreshCookie(res, token, { rememberMe = true } = {}) {
   const maxAge = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
   const parts = [
     `${REFRESH_COOKIE_NAME}=${encodeURIComponent(token)}`,
     'Path=/api/auth',
     'HttpOnly',
     'SameSite=Lax',
-    `Max-Age=${maxAge}`,
   ];
+  if (rememberMe) parts.push(`Max-Age=${maxAge}`);
   if (isProduction) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
@@ -267,10 +277,11 @@ function clearLoginFailures(req, identifier) {
   loginAttempts.delete(loginKey(req, identifier));
 }
 
-async function createAuthSession(user, req) {
+async function createAuthSession(user, req, { rememberMe = true } = {}) {
   const refreshToken = randomToken(64);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const ttlMs = rememberMe ? REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
+  const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
   const session = await db.create('auth_sessions', {
     id: makeId('SESS'),
     userId: user.id,
@@ -280,6 +291,7 @@ async function createAuthSession(user, req) {
     createdAt: now.toISOString(),
     lastUsedAt: now.toISOString(),
     expiresAt,
+    rememberMe: Boolean(rememberMe),
     revokedAt: '',
     rotatedAt: '',
   });
@@ -321,14 +333,109 @@ async function revokeAllUserSessions(userId, reason = 'PASSWORD_CHANGED') {
   ));
 }
 
-async function issueAuthResponse(req, res, user, existingSessionId = '') {
-  let sessionId = existingSessionId;
-  if (!sessionId) {
-    const { session, refreshToken } = await createAuthSession(user, req);
-    sessionId = session.id;
-    setRefreshCookie(res, refreshToken);
+function isPatientUser(user) {
+  const role = String(user?.primaryRole || user?.role || '').toLowerCase();
+  const roles = Array.isArray(user?.roles) ? user.roles.map((item) => String(item).toLowerCase()) : [];
+  return role === 'patient' || roles.includes('patient');
+}
+
+function maskPhone(phone) {
+  const digits = normalizeMobile(phone);
+  if (digits.length < 4) return digits;
+  return `${digits.slice(0, 2)}******${digits.slice(-2)}`;
+}
+
+async function findTrustedDevice(userId, rawToken) {
+  if (!userId || !rawToken) return null;
+  const rows = await db.list('trusted_devices', { userId, tokenHash: sha256(rawToken) });
+  const item = rows.find((row) => !row.revokedAt && (!row.expiresAt || new Date(row.expiresAt).getTime() > Date.now()));
+  return item || null;
+}
+
+async function issueTrustedDevice(user, req) {
+  const token = randomToken(40);
+  await db.create('trusted_devices', {
+    id: makeId('DEV'),
+    userId: user.id,
+    tokenHash: sha256(token),
+    ip: clientIp(req),
+    userAgent: req.headers['user-agent'] || '',
+    createdAt: formatDateTime(),
+    lastUsedAt: formatDateTime(),
+    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    revokedAt: '',
+  });
+  return token;
+}
+
+async function revokeTrustedDevice(userId, rawToken) {
+  if (!userId || !rawToken) return;
+  const item = await findTrustedDevice(userId, rawToken);
+  if (item) await db.update('trusted_devices', item.id, { revokedAt: formatDateTime() });
+}
+
+async function createAndSendLoginOtp(phone, req, extra = {}) {
+  const purpose = 'login';
+  const normalized = normalizeMobile(phone);
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
+  const item = await db.create('mobile_otps', {
+    id: makeId('OTP'),
+    phone: normalized,
+    purpose,
+    otpHash: hashOtp(normalized, purpose, otp),
+    attempts: 0,
+    maxAttempts: OTP_MAX_ATTEMPTS,
+    status: 'PENDING',
+    ip: clientIp(req),
+    userAgent: req.headers['user-agent'] || '',
+    expiresAt,
+    verifiedAt: '',
+    consumedAt: '',
+    ...extra,
+  });
+  const message = `Your Ayudh Vikas Foundation OTP is ${otp}. It is valid for ${Math.round(OTP_TTL_MS / 60000)} minutes. Do not share this code.`;
+  const smsResult = await sendSMS(normalized, {
+    message,
+    templateId: process.env.SMS_OTP_TEMPLATE_ID,
+    data: { otp, purpose, app: 'Ayudh Vikas Foundation' },
+  });
+  if (isProduction && (smsResult?.skipped || smsResult?.ok === false)) {
+    await db.update('mobile_otps', item.id, { status: 'FAILED', failureReason: smsResult.reason || 'sms_send_failed' });
+    return { error: 'Unable to deliver OTP SMS. Please try again.', status: 503 };
   }
-  return { token: signToken(user, sessionId), user };
+  return {
+    item,
+    otp,
+    smsResult,
+    requestId: item.id,
+    expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+    retryAfterSeconds: Math.floor(OTP_RESEND_COOLDOWN_MS / 1000),
+    delivery: smsResult?.skipped ? 'development_log' : 'sent',
+    devOtp: !isProduction || process.env.OTP_DEV_EXPOSE === 'true' ? otp : undefined,
+  };
+}
+
+async function issueAuthResponse(req, res, user, existingSessionIdOrOpts = '') {
+  const opts = typeof existingSessionIdOrOpts === 'string'
+    ? { existingSessionId: existingSessionIdOrOpts, rememberMe: true }
+    : { rememberMe: true, ...(existingSessionIdOrOpts || {}) };
+  let sessionId = opts.existingSessionId || '';
+  let deviceTrustToken = '';
+  if (!sessionId) {
+    const { session, refreshToken } = await createAuthSession(user, req, { rememberMe: opts.rememberMe });
+    sessionId = session.id;
+    setRefreshCookie(res, refreshToken, { rememberMe: opts.rememberMe });
+    if (opts.rememberMe && isPatientUser(user)) {
+      deviceTrustToken = await issueTrustedDevice(user, req);
+    }
+  }
+  return {
+    token: signToken(user, sessionId),
+    user,
+    rememberMe: Boolean(opts.rememberMe),
+    deviceTrustToken: deviceTrustToken || undefined,
+  };
 }
 
 function broadcast(event) {
@@ -436,12 +543,61 @@ function cleanPhone(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function normalizeMobile(value) {
+  const digits = cleanPhone(value);
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 10) return digits;
+  return digits;
+}
+
 function sameText(a, b) {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 }
 
 function formatDateTime(value = new Date()) {
   return new Date(value).toISOString();
+}
+
+function hashOtp(phone, purpose, otp) {
+  return sha256(`${normalizeMobile(phone)}:${String(purpose || 'general')}:${String(otp)}:${OTP_SECRET}`);
+}
+
+function otpPurpose(value) {
+  return String(value || 'registration').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || 'registration';
+}
+
+function generateOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+async function recentOtpRequests(phone, purpose) {
+  const rows = await db.list('mobile_otps', { phone: normalizeMobile(phone), purpose: otpPurpose(purpose) });
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  return rows.filter((row) => new Date(row.createdAt || 0).getTime() >= oneHourAgo);
+}
+
+async function requireVerifiedMobileOtp({ phone, purpose = 'registration', token, consume = false }) {
+  const normalizedPhone = normalizeMobile(phone);
+  if (!normalizedPhone || normalizedPhone.length !== 10) {
+    return { ok: false, error: 'Valid 10-digit mobile number is required.' };
+  }
+  if (!token) return { ok: false, error: 'Mobile OTP verification is required.' };
+  const rows = await db.list('mobile_otps', {
+    phone: normalizedPhone,
+    purpose: otpPurpose(purpose),
+    verificationTokenHash: sha256(token),
+  });
+  const item = rows.find((row) =>
+    row.verifiedAt &&
+    !row.consumedAt &&
+    row.proofExpiresAt &&
+    new Date(row.proofExpiresAt).getTime() > Date.now()
+  );
+  if (!item) return { ok: false, error: 'Mobile OTP verification expired. Please verify again.' };
+  if (consume) {
+    await db.update('mobile_otps', item.id, { consumedAt: formatDateTime(), status: 'CONSUMED' });
+  }
+  return { ok: true, item };
 }
 
 async function getActor(req) {
@@ -1144,7 +1300,316 @@ app.get('/api/health', async (_req, res) => {
       : status.configured
         ? `MongoDB URI is set but the connection failed${status.error ? `: ${status.error}` : ''}. The app is using the local store until it succeeds.`
         : 'Paste MONGODB_URI in .env to connect MongoDB. Until then the app uses a local JSON store.',
+    sms: smsProviderStatus(),
+    push: { configured: pushConfigured() },
   });
+});
+
+app.get('/api/push/vapid-public-key', (_req, res) => {
+  const key = vapidPublicKey();
+  if (!key) return res.status(503).json({ error: 'Web push is not configured.' });
+  res.json({ publicKey: key });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const subscription = req.body?.subscription || req.body;
+    const userId = req.user?.id || req.body?.userId || '';
+    const item = await savePushSubscription(db, {
+      subscription,
+      userId,
+      consent: req.body?.consent !== false,
+    });
+    if (item?.error) return res.status(400).json({ error: item.error });
+    res.json({ ok: true, item });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to save push subscription.' });
+  }
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  try {
+    await removePushSubscription(db, req.body?.endpoint || req.body?.subscription?.endpoint);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to remove push subscription.' });
+  }
+});
+
+app.post('/api/admin/notifications/broadcast', adminRequired, async (req, res) => {
+  try {
+    const title = String(req.body?.title || 'Ayudh Vikas Foundation').trim();
+    const message = String(req.body?.message || req.body?.body || '').trim();
+    const audienceRaw = String(req.body?.audience || 'all').toLowerCase();
+    const audienceMap = {
+      'all users': 'all',
+      all: 'all',
+      patients: 'patient',
+      'rural patients': 'patient',
+      doctors: 'doctor',
+      hospitals: 'hospital',
+    };
+    const role = audienceMap[audienceRaw] || (['patient', 'doctor', 'hospital'].includes(audienceRaw) ? audienceRaw : 'all');
+    if (!message) return res.status(400).json({ error: 'Notification message is required.' });
+    const notification = {
+      type: req.body?.type || 'promotional',
+      title,
+      message,
+      url: req.body?.url || '/',
+      data: { promotional: true, audience: role, sentBy: req.user.id },
+    };
+    const count = await notifyUsersByRole(db, role === 'all' ? 'all' : role, notification, broadcast);
+    const push = await sendPushToAudience(db, {
+      audience: role === 'all' ? 'all' : `${role}s`,
+      notification,
+    });
+    await auditAuth('ADMIN_PUSH_BROADCAST', req.user.id, req, { audience: role, title });
+    res.json({ ok: true, recipients: count, pushSent: push.sent, message: 'Broadcast sent.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to send broadcast.' });
+  }
+});
+
+app.post('/api/otp/send', async (req, res) => {
+  try {
+    if (!MOBILE_OTP_ENABLED) {
+      return res.status(503).json({ error: 'Mobile OTP is temporarily disabled.' });
+    }
+    const purpose = otpPurpose(req.body?.purpose || 'registration');
+    const phone = normalizeMobile(req.body?.phone || req.body?.mobile || req.body?.mobileNumber);
+    if (!phone || phone.length !== 10) {
+      return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
+    }
+
+    const recent = await recentOtpRequests(phone, purpose);
+    const latest = recent[0];
+    if (latest && new Date(latest.createdAt || 0).getTime() > Date.now() - OTP_RESEND_COOLDOWN_MS) {
+      const retryAfterSeconds = Math.ceil((OTP_RESEND_COOLDOWN_MS - (Date.now() - new Date(latest.createdAt).getTime())) / 1000);
+      return res.status(429).json({ error: `Please wait ${retryAfterSeconds} seconds before requesting another OTP.`, retryAfterSeconds });
+    }
+    if (recent.length >= OTP_MAX_SENDS_PER_HOUR) {
+      return res.status(429).json({ error: 'Too many OTP requests. Please try again after one hour.' });
+    }
+
+    if (purpose === 'registration') {
+      const existing = await db.findUserByIdentifier(phone);
+      if (existing) return res.status(409).json({ error: 'An account already exists with this mobile number.' });
+    }
+    if (purpose === 'login' || purpose === 'password_reset') {
+      const existing = await db.findUserByIdentifier(phone);
+      if (!existing) return res.status(404).json({ error: 'No account found for this mobile number.' });
+    }
+
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
+    const item = await db.create('mobile_otps', {
+      id: makeId('OTP'),
+      phone,
+      purpose,
+      otpHash: hashOtp(phone, purpose, otp),
+      attempts: 0,
+      maxAttempts: OTP_MAX_ATTEMPTS,
+      status: 'PENDING',
+      ip: clientIp(req),
+      userAgent: req.headers['user-agent'] || '',
+      expiresAt,
+      verifiedAt: '',
+      consumedAt: '',
+    });
+
+    const message = `Your Ayudh Vikas Foundation OTP is ${otp}. It is valid for ${Math.round(OTP_TTL_MS / 60000)} minutes. Do not share this code.`;
+    const smsResult = await sendSMS(phone, {
+      message,
+      templateId: process.env.SMS_OTP_TEMPLATE_ID,
+      data: { otp, purpose, app: 'Ayudh Vikas Foundation' },
+    });
+
+    if (isProduction && (smsResult?.skipped || smsResult?.ok === false)) {
+      await db.update('mobile_otps', item.id, { status: 'FAILED', failureReason: smsResult.reason || smsResult.response || 'sms_send_failed' });
+      return res.status(503).json({
+        error: smsResult?.skipped
+          ? 'SMS provider is not configured. Please add SMS credentials and try again.'
+          : 'Unable to deliver OTP SMS. Check SMS credentials and try again.',
+      });
+    }
+
+    res.json({
+      ok: true,
+      requestId: item.id,
+      expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+      retryAfterSeconds: Math.floor(OTP_RESEND_COOLDOWN_MS / 1000),
+      provider: smsResult?.provider || smsProviderStatus().provider,
+      delivery: smsResult?.skipped ? 'development_log' : 'sent',
+      devOtp: !isProduction || process.env.OTP_DEV_EXPOSE === 'true' ? otp : undefined,
+      message: smsResult?.skipped
+        ? 'OTP generated. SMS provider is not configured, so check the server log in development.'
+        : 'OTP sent successfully.',
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to send OTP.' });
+  }
+});
+
+app.post('/api/otp/verify', async (req, res) => {
+  if (!MOBILE_OTP_ENABLED) {
+    return res.status(503).json({ error: 'Mobile OTP is temporarily disabled.' });
+  }
+  try {
+    const purpose = otpPurpose(req.body?.purpose || 'registration');
+    const phone = normalizeMobile(req.body?.phone || req.body?.mobile || req.body?.mobileNumber);
+    const otp = String(req.body?.otp || '').replace(/\D/g, '');
+    const requestId = String(req.body?.requestId || '').trim();
+    if (!phone || phone.length !== 10) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
+    if (!otp || otp.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit OTP.' });
+
+    const rows = requestId
+      ? [await db.get('mobile_otps', requestId)].filter(Boolean)
+      : await db.list('mobile_otps', { phone, purpose });
+    const item = rows
+      .filter((row) => row.phone === phone && row.purpose === purpose && !row.verifiedAt && !row.consumedAt)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+
+    if (!item) return res.status(404).json({ error: 'OTP request not found. Please request a new OTP.' });
+    if (new Date(item.expiresAt || 0).getTime() <= Date.now()) {
+      await db.update('mobile_otps', item.id, { status: 'EXPIRED' });
+      return res.status(400).json({ error: 'OTP expired. Please request a new OTP.' });
+    }
+    if (Number(item.attempts || 0) >= Number(item.maxAttempts || OTP_MAX_ATTEMPTS)) {
+      await db.update('mobile_otps', item.id, { status: 'LOCKED' });
+      return res.status(429).json({ error: 'Too many incorrect OTP attempts. Please request a new OTP.' });
+    }
+
+    if (item.otpHash !== hashOtp(phone, purpose, otp)) {
+      const attempts = Number(item.attempts || 0) + 1;
+      await db.update('mobile_otps', item.id, { attempts, status: attempts >= OTP_MAX_ATTEMPTS ? 'LOCKED' : 'PENDING' });
+      return res.status(400).json({ error: `Invalid OTP. ${Math.max(0, OTP_MAX_ATTEMPTS - attempts)} attempt(s) left.` });
+    }
+
+    const proofToken = randomToken(40);
+    await db.update('mobile_otps', item.id, {
+      status: 'VERIFIED',
+      attempts: Number(item.attempts || 0) + 1,
+      verifiedAt: formatDateTime(),
+      verificationTokenHash: sha256(proofToken),
+      proofExpiresAt: new Date(Date.now() + OTP_PROOF_TTL_MS).toISOString(),
+    });
+
+    res.json({
+      ok: true,
+      verified: true,
+      phone,
+      otpToken: proofToken,
+      proofExpiresInSeconds: Math.floor(OTP_PROOF_TTL_MS / 1000),
+      message: 'Mobile number verified successfully.',
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to verify OTP.' });
+  }
+});
+
+app.post('/api/auth/login-otp', async (req, res) => {
+  try {
+    if (!MOBILE_OTP_ENABLED) {
+      return res.status(503).json({ error: 'Mobile OTP is temporarily disabled.' });
+    }
+    const phone = normalizeMobile(req.body?.phone || req.body?.mobile || req.body?.identifier);
+    const otp = String(req.body?.otp || '').replace(/\D/g, '');
+    const requestId = String(req.body?.requestId || '').trim();
+    if (!phone || phone.length !== 10) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
+    if (!otp || otp.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit OTP.' });
+
+    const rows = requestId
+      ? [await db.get('mobile_otps', requestId)].filter(Boolean)
+      : await db.list('mobile_otps', { phone, purpose: 'login' });
+    const item = rows
+      .filter((row) => row.phone === phone && row.purpose === 'login' && !row.verifiedAt && !row.consumedAt)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+    if (!item) return res.status(404).json({ error: 'OTP request not found. Please request a new OTP.' });
+    if (new Date(item.expiresAt || 0).getTime() <= Date.now()) {
+      await db.update('mobile_otps', item.id, { status: 'EXPIRED' });
+      return res.status(400).json({ error: 'OTP expired. Please request a new OTP.' });
+    }
+    if (Number(item.attempts || 0) >= Number(item.maxAttempts || OTP_MAX_ATTEMPTS)) {
+      await db.update('mobile_otps', item.id, { status: 'LOCKED' });
+      return res.status(429).json({ error: 'Too many incorrect OTP attempts. Please request a new OTP.' });
+    }
+    if (item.otpHash !== hashOtp(phone, 'login', otp)) {
+      const attempts = Number(item.attempts || 0) + 1;
+      await db.update('mobile_otps', item.id, { attempts, status: attempts >= OTP_MAX_ATTEMPTS ? 'LOCKED' : 'PENDING' });
+      return res.status(400).json({ error: `Invalid OTP. ${Math.max(0, OTP_MAX_ATTEMPTS - attempts)} attempt(s) left.` });
+    }
+
+    const row = await db.findUserByIdentifier(phone);
+    if (!row) return res.status(404).json({ error: 'No account found for this mobile number.' });
+    await db.update('mobile_otps', item.id, {
+      status: 'CONSUMED',
+      verifiedAt: formatDateTime(),
+      consumedAt: formatDateTime(),
+      consumedByUserId: row.id,
+    });
+    const user = await db.getUser(row.id);
+    if (item.userId && item.userId !== user.id) {
+      return res.status(400).json({ error: 'OTP does not match this account. Please request a new OTP.' });
+    }
+    if (!assertLoginAllowed(req, phone)) {
+      return res.status(429).json({ error: 'Too many login attempts. Please try again after 15 minutes.' });
+    }
+    clearLoginFailures(req, phone);
+    await auditAuth('LOGIN_OTP_SUCCESS', user.id, req);
+    const rememberMe = Boolean(req.body?.rememberMe);
+    res.json(await issueAuthResponse(req, res, user, { rememberMe }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'OTP login failed.' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const phone = normalizeMobile(req.body?.phone || req.body?.mobile);
+    const otp = String(req.body?.otp || '').replace(/\D/g, '');
+    const requestId = String(req.body?.requestId || '').trim();
+    const password = String(req.body?.password || req.body?.newPassword || '');
+    if (!phone || phone.length !== 10) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
+    if (!otp || otp.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit OTP.' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+    const rows = requestId
+      ? [await db.get('mobile_otps', requestId)].filter(Boolean)
+      : await db.list('mobile_otps', { phone, purpose: 'password_reset' });
+    const item = rows
+      .filter((row) => row.phone === phone && row.purpose === 'password_reset' && !row.consumedAt)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+    if (!item) return res.status(404).json({ error: 'OTP request not found. Please request a new OTP.' });
+    if (new Date(item.expiresAt || 0).getTime() <= Date.now()) {
+      await db.update('mobile_otps', item.id, { status: 'EXPIRED' });
+      return res.status(400).json({ error: 'OTP expired. Please request a new OTP.' });
+    }
+    if (item.otpHash !== hashOtp(phone, 'password_reset', otp)) {
+      const attempts = Number(item.attempts || 0) + 1;
+      await db.update('mobile_otps', item.id, { attempts, status: attempts >= OTP_MAX_ATTEMPTS ? 'LOCKED' : 'PENDING' });
+      return res.status(400).json({ error: 'Invalid OTP.' });
+    }
+
+    const row = await db.findUserByIdentifier(phone);
+    if (!row) return res.status(404).json({ error: 'No account found for this mobile number.' });
+    await db.updateUser(row.id, { password_hash: hashPassword(password) });
+    await db.update('mobile_otps', item.id, {
+      status: 'CONSUMED',
+      verifiedAt: item.verifiedAt || formatDateTime(),
+      consumedAt: formatDateTime(),
+      consumedByUserId: row.id,
+    });
+    await auditAuth('PASSWORD_RESET', row.id, req);
+    res.json({ ok: true, message: 'Password updated. You can sign in now.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Unable to reset password.' });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -1168,8 +1633,52 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const user = await db.getUser(row.id);
     clearLoginFailures(req, identifier);
+    const rememberMe = Boolean(req.body?.rememberMe);
+    const deviceTrustToken = String(req.body?.deviceTrustToken || '').trim();
+
+    if (MOBILE_OTP_ENABLED && isPatientUser(user)) {
+      const trusted = await findTrustedDevice(user.id, deviceTrustToken);
+      if (trusted) {
+        await db.update('trusted_devices', trusted.id, { lastUsedAt: formatDateTime() });
+        await auditAuth('LOGIN_TRUSTED_DEVICE', user.id, req, { deviceId: trusted.id });
+        return res.json(await issueAuthResponse(req, res, user, { rememberMe: true }));
+      }
+      const phone = normalizeMobile(user.phone || user.data?.phone || user.data?.mobileNumber || identifier);
+      if (!phone || phone.length !== 10) {
+        return res.status(400).json({ error: 'This patient account has no mobile number for OTP. Please contact support.' });
+      }
+      const recent = await recentOtpRequests(phone, 'login');
+      const latest = recent[0];
+      if (latest && new Date(latest.createdAt || 0).getTime() > Date.now() - OTP_RESEND_COOLDOWN_MS) {
+        return res.json({
+          requiresOtp: true,
+          phoneHint: maskPhone(phone),
+          phone,
+          requestId: latest.id,
+          retryAfterSeconds: Math.ceil((OTP_RESEND_COOLDOWN_MS - (Date.now() - new Date(latest.createdAt).getTime())) / 1000),
+          message: `OTP already sent to ${maskPhone(phone)}. Enter it to finish signing in.`,
+        });
+      }
+      const sent = await createAndSendLoginOtp(phone, req, { userId: user.id });
+      if (sent.error) return res.status(sent.status || 503).json({ error: sent.error });
+      await auditAuth('LOGIN_OTP_CHALLENGE', user.id, req, { requestId: sent.requestId });
+      return res.json({
+        requiresOtp: true,
+        phoneHint: maskPhone(phone),
+        phone,
+        requestId: sent.requestId,
+        expiresInSeconds: sent.expiresInSeconds,
+        retryAfterSeconds: sent.retryAfterSeconds,
+        delivery: sent.delivery,
+        devOtp: sent.devOtp,
+        message: sent.delivery === 'sent'
+          ? `OTP sent to ${maskPhone(phone)}. Enter it to finish signing in.`
+          : `OTP generated for ${maskPhone(phone)}. Check the development OTP below.`,
+      });
+    }
+
     await auditAuth('LOGIN_SUCCESS', user.id, req);
-    res.json(await issueAuthResponse(req, res, user));
+    res.json(await issueAuthResponse(req, res, user, { rememberMe: rememberMe || true }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed.' });
@@ -1190,7 +1699,16 @@ app.post('/api/auth/register', async (req, res) => {
     const email = body.email || body.contactEmail || '';
     const phone = body.mobileNumber || body.mobile || body.phone || body.contactPhone || '';
     const password = String(body.password || '');
-    const { password: _omitPassword, confirmPassword: _omitConfirm, ...safeBody } = body;
+    const {
+      password: _omitPassword,
+      confirmPassword: _omitConfirm,
+      mobileOtpToken: _omitMobileOtpToken,
+      otpToken: _omitOtpToken,
+      mobileOtpPurpose: _omitMobileOtpPurpose,
+      otp: _omitOtp,
+      ...safeBody
+    } = body;
+    let verifiedMobileOtp = null;
 
     if (phone) {
       const existing = await db.findUserByIdentifier(phone);
@@ -1199,6 +1717,17 @@ app.post('/api/auth/register', async (req, res) => {
     if (email) {
       const existing = await db.findUserByIdentifier(email);
       if (existing) return res.status(409).json({ error: 'An account already exists with this email.' });
+    }
+
+    if (MOBILE_OTP_ENABLED && role === 'patient') {
+      const otpCheck = await requireVerifiedMobileOtp({
+        phone,
+        purpose: body.mobileOtpPurpose || 'registration',
+        token: body.mobileOtpToken || body.otpToken,
+        consume: false,
+      });
+      if (!otpCheck.ok) return res.status(400).json({ error: otpCheck.error });
+      verifiedMobileOtp = otpCheck.item;
     }
 
     if (role === 'doctor') {
@@ -1270,6 +1799,9 @@ app.post('/api/auth/register', async (req, res) => {
         email,
         status: email ? 'PENDING_VERIFICATION' : 'APPROVED',
       });
+      if (verifiedMobileOtp?.id) {
+        await db.update('mobile_otps', verifiedMobileOtp.id, { consumedAt: formatDateTime(), status: 'CONSUMED', consumedByUserId: user.id });
+      }
     } else if (role === 'doctor') {
       const doctorSpecialities = Array.from(
         new Set([body.speciality, ...(body.specialities || body.additionalSpecialities || [])].filter(Boolean))
@@ -1538,8 +2070,12 @@ app.all('/api/auth/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Session expired. Please sign in again.' });
     }
     const rotated = await rotateAuthSession(session, req);
-    setRefreshCookie(res, rotated.refreshToken);
-    res.json({ token: signToken(user, rotated.session.id), user });
+    setRefreshCookie(res, rotated.refreshToken, { rememberMe: session.rememberMe !== false });
+    res.json({
+      token: signToken(user, rotated.session.id),
+      user,
+      rememberMe: session.rememberMe !== false,
+    });
   } catch (err) {
     console.error(err);
     clearRefreshCookie(res);
@@ -1551,11 +2087,14 @@ app.post('/api/auth/logout', async (req, res) => {
   try {
     const refreshToken = parseCookies(req)[REFRESH_COOKIE_NAME];
     const session = await getActiveAuthSession(refreshToken);
+    const deviceTrustToken = String(req.body?.deviceTrustToken || '').trim();
     if (session) {
       await revokeAuthSession(session.id, 'LOGOUT');
+      await revokeTrustedDevice(session.userId, deviceTrustToken);
       await auditAuth('LOGOUT', session.userId, req, { sessionId: session.id });
     } else if (req.authSessionId) {
       await revokeAuthSession(req.authSessionId, 'LOGOUT');
+      await revokeTrustedDevice(req.user?.id, deviceTrustToken);
       await auditAuth('LOGOUT', req.user?.id, req, { sessionId: req.authSessionId });
     }
     clearRefreshCookie(res);
@@ -2078,6 +2617,18 @@ app.post('/api/sessions/:sessionId/reports', authRequired, async (req, res) => {
     uploadedBy: actor.user.id,
     uploadedByRole: actor.role,
   });
+  try {
+    const patient = session.patientId ? await db.get('patients', session.patientId) : null;
+    await notifyPatientRecord(db, patient || { id: session.patientId, userId: session.userId }, {
+      type: 'report_updated',
+      title: 'Your report updated',
+      message: `${report.title || 'A medical report'} has been added to your records.`,
+      url: '/patient/dashboard',
+      data: { recordId: report.id, sessionId: session.sessionId },
+    }, broadcast);
+  } catch (err) {
+    console.warn(err);
+  }
   res.status(201).json({ item: report });
 });
 
@@ -2759,6 +3310,16 @@ app.get('/api/notifications', authRequired, async (req, res) => {
   res.json({ items: notifications });
 });
 
+app.post('/api/notifications/read-all', authRequired, async (req, res) => {
+  const notifications = await db.list('notifications', { userId: req.user.id });
+  const unread = notifications.filter((item) => !item.read);
+  const items = [];
+  for (const note of unread) {
+    items.push(await db.update('notifications', note.id, { read: true, readAt: new Date().toISOString() }));
+  }
+  res.json({ ok: true, items });
+});
+
 app.patch('/api/notifications/:id/read', authRequired, async (req, res) => {
   const existing = await db.get('notifications', req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -3412,8 +3973,52 @@ app.post('/api/records/:collection', async (req, res) => {
     }, broadcast);
   }
 
-  if (collection === 'appointments' && ['Confirmed', 'Scheduled', 'Accepted'].includes(item.status)) {
-    try { await notifyAppointmentConfirmed(db, item.id, broadcast); } catch (err) { console.warn(err); }
+  if (collection === 'appointments') {
+    if (['Pending', 'Requested'].includes(String(item.status || 'Pending'))) {
+      try {
+        await notifyDoctorById(db, item.doctorId, {
+          type: 'appointment_request',
+          title: 'New appointment request',
+          message: `${item.patientName || 'A patient'} requested an appointment for ${item.appointmentDate || ''} ${item.appointmentTime || ''}`.trim(),
+          url: '/doctor/appointments',
+          data: { appointmentId: item.id },
+        }, broadcast);
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+    if (['Confirmed', 'Scheduled', 'Accepted'].includes(item.status)) {
+      try { await notifyAppointmentConfirmed(db, item.id, broadcast); } catch (err) { console.warn(err); }
+    }
+  }
+
+  if (collection === 'health_camps') {
+    try {
+      await notifyUsersByRole(db, 'patient', {
+        type: 'health_camp',
+        title: 'New health camp launched',
+        message: `${item.title || item.name || 'A health camp'} is scheduled at ${item.location || item.venue || 'your area'}${item.date ? ` on ${item.date}` : ''}.`,
+        url: '/health-camps',
+        data: { campId: item.id },
+      }, broadcast);
+    } catch (err) {
+      console.warn(err);
+    }
+  }
+
+  if (collection === 'health_records') {
+    try {
+      const patient = item.patientId ? await db.get('patients', item.patientId) : null;
+      await notifyPatientRecord(db, patient || { id: item.patientId, userId: item.userId, phone: item.phone, email: item.email }, {
+        type: 'report_updated',
+        title: 'Your report updated',
+        message: `${item.title || 'A medical report'} is now available.`,
+        url: '/patient/dashboard',
+        data: { recordId: item.id },
+      }, broadcast);
+    } catch (err) {
+      console.warn(err);
+    }
   }
 
   broadcast({ event: 'record_created', collection, action: 'create', id: item.id, data: item, record: item });
@@ -3444,6 +4049,27 @@ app.patch('/api/records/:collection/:id', authRequired, async (req, res) => {
     return res.status(403).json({ error: 'Cannot modify this record' });
   }
   const item = await db.update(collection, id, patch);
+  if (collection === 'appointments') {
+    const nextStatus = String(item.status || '');
+    const prevStatus = String(existing.status || '');
+    if (['Confirmed', 'Scheduled', 'Accepted'].includes(nextStatus) && prevStatus !== nextStatus) {
+      try { await notifyAppointmentConfirmed(db, item.id, broadcast); } catch (err) { console.warn(err); }
+    }
+    if (nextStatus === 'Rejected' && prevStatus !== 'Rejected') {
+      try {
+        const patient = item.patientId ? await db.get('patients', item.patientId) : null;
+        await notifyPatientRecord(db, patient || { id: item.patientId, phone: item.phone, email: item.email, userId: item.userId }, {
+          type: 'appointment_rejected',
+          title: 'Appointment request declined',
+          message: `${item.doctorName || 'The doctor'} declined your appointment${item.rejectionReason ? `: ${item.rejectionReason}` : '.'}`,
+          url: '/appointments',
+          data: { appointmentId: item.id },
+        }, broadcast);
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  }
   if (collection === 'doctors' && item.hospitalId) {
     const hospital = await db.get('hospitals', item.hospitalId);
     if (hospital) {

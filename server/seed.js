@@ -254,7 +254,7 @@ export async function seedDatabase(db, hashPassword) {
     emergencyContactPhone: '9848012345',
     image: '/src/assets/images/patient_avatar_1787229395408.jpg',
     walletBalance: 1250,
-    identifier: '9876543210',
+    identifier: '8367253903',
   };
 
   await db.createUser({
@@ -264,7 +264,7 @@ export async function seedDatabase(db, hashPassword) {
     primaryRole: 'patient',
     name: 'Ramesh Kumar',
     email: 'ramesh.kumar@example.com',
-    phone: '9876543210',
+    phone: '8367253903',
     password_hash: patientPassword,
     emailVerified: true,
     data: patientProfile,
@@ -464,7 +464,7 @@ export async function seedDatabase(db, hashPassword) {
     userId: 'user-patient-1',
     fullName: 'Ramesh Kumar',
     ...patientProfile,
-    phone: '9876543210',
+    phone: '8367253903',
     email: 'ramesh.kumar@example.com',
     membershipTier: 'Gold Health Care Member',
     validTill: '31 Dec 2026',

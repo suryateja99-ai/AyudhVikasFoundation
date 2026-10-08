@@ -1,6 +1,8 @@
 import { beginApiActivity, endApiActivity } from './apiActivity';
 
 const TOKEN_KEY = 'ayudh_token';
+const DEVICE_TRUST_KEY = 'ayudh_device_trust';
+const REMEMBER_KEY = 'ayudh_remember';
 const API_BASE = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 export function apiUrl(path: string) {
@@ -20,16 +22,60 @@ export function getToken(): string | null {
   return accessToken;
 }
 
-export function setToken(token: string | null) {
+export function setToken(token: string | null, persist = false) {
   accessToken = token;
   try {
     if (token) {
-      sessionStorage.setItem(TOKEN_KEY, token);
-      localStorage.removeItem(TOKEN_KEY);
+      if (persist) {
+        localStorage.setItem(TOKEN_KEY, token);
+        sessionStorage.removeItem(TOKEN_KEY);
+        localStorage.setItem(REMEMBER_KEY, '1');
+      } else {
+        sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REMEMBER_KEY);
+      }
     } else {
       localStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REMEMBER_KEY);
     }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isRememberedSession() {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function getDeviceTrustToken(): string {
+  try {
+    return localStorage.getItem(DEVICE_TRUST_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function applyAuthSession(data: { token?: string; rememberMe?: boolean; deviceTrustToken?: string }) {
+  const persist = Boolean(data.rememberMe);
+  setToken(data.token || null, persist);
+  try {
+    if (data.deviceTrustToken) localStorage.setItem(DEVICE_TRUST_KEY, data.deviceTrustToken);
+    if (!persist) localStorage.removeItem(DEVICE_TRUST_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearAuthSession() {
+  setToken(null);
+  try {
+    localStorage.removeItem(DEVICE_TRUST_KEY);
   } catch {
     /* ignore */
   }
@@ -75,7 +121,14 @@ async function doRefreshAccessToken() {
     setToken(null);
     throw new Error(data.error || 'Session expired');
   }
-  setToken(data.token || null);
+  const persist = (() => {
+    try {
+      return localStorage.getItem(REMEMBER_KEY) === '1' || Boolean(data.rememberMe);
+    } catch {
+      return Boolean(data.rememberMe);
+    }
+  })();
+  setToken(data.token || null, persist);
   return data;
 }
 
@@ -123,18 +176,69 @@ export const api = {
       stats: Record<string, number>;
     }>('/api/bootstrap'),
   login: (identifier: string, password: string) =>
-    request<{ token: string; user: any }>('/api/auth/login', {
+    request<{
+      token?: string;
+      user?: any;
+      rememberMe?: boolean;
+      deviceTrustToken?: string;
+      requiresOtp?: boolean;
+      phone?: string;
+      phoneHint?: string;
+      requestId?: string;
+      retryAfterSeconds?: number;
+      devOtp?: string;
+      message?: string;
+    }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({
+        identifier,
+        password,
+        deviceTrustToken: getDeviceTrustToken(),
+      }),
+    }),
+  loginWithOtp: (payload: { phone: string; otp: string; requestId?: string; rememberMe?: boolean }) =>
+    request<{ token: string; user: any; rememberMe?: boolean; deviceTrustToken?: string }>('/api/auth/login-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  resetPasswordWithOtp: (payload: { phone: string; otp: string; password: string; requestId?: string }) =>
+    request<{ ok: boolean; message?: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
   refresh: () => refreshAccessToken() as Promise<{ token: string; user: any }>,
   logout: () =>
     request<{ ok: boolean }>('/api/auth/logout', {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({ deviceTrustToken: getDeviceTrustToken() }),
     }, false),
   register: (payload: any) =>
     request<{ token: string; user: any; patientId?: string; referenceNo?: string }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  sendMobileOtp: (payload: { phone: string; purpose?: string }) =>
+    request<{
+      ok: boolean;
+      requestId: string;
+      expiresInSeconds: number;
+      retryAfterSeconds: number;
+      delivery?: string;
+      devOtp?: string;
+      message?: string;
+    }>('/api/otp/send', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  verifyMobileOtp: (payload: { phone: string; purpose?: string; otp: string; requestId?: string }) =>
+    request<{
+      ok: boolean;
+      verified: boolean;
+      phone: string;
+      otpToken: string;
+      proofExpiresInSeconds: number;
+      message?: string;
+    }>('/api/otp/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -320,8 +424,15 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
   notifications: () => request<{ items: any[] }>('/api/notifications'),
+  broadcastNotification: (payload: { title: string; message: string; audience?: string; type?: string; url?: string }) =>
+    request<{ ok: boolean; recipients: number; pushSent: number; message?: string }>('/api/admin/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   markNotificationRead: (id: string) =>
     request<{ item: any }>(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () =>
+    request<{ ok: boolean; items: any[] }>('/api/notifications/read-all', { method: 'POST', body: JSON.stringify({}) }),
   deleteNotification: (id: string) =>
     request<{ ok: boolean }>(`/api/notifications/${id}`, { method: 'DELETE' }),
   pendingDoctorVerifications: () => request<{ items: any[] }>('/api/admin/verifications/doctors'),

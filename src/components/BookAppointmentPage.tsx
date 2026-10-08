@@ -53,6 +53,7 @@ interface Doctor {
   speciality: string;
   qualifications: string;
   hospital: string;
+  hospitalId?: string;
   district: string;
   rating: number;
   reviewsCount: number;
@@ -64,9 +65,42 @@ interface Doctor {
     day: string;
     date: string;
     month: string;
+    iso?: string;
     isToday?: boolean;
     slots: string[];
   }[];
+}
+
+function isoToday() {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function buildUpcomingSlots(count = 5) {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const times = ['10:00 AM', '11:30 AM', '04:00 PM'];
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+    return {
+      day: index === 0 ? 'Today' : days[date.getDay()],
+      date: String(date.getDate()).padStart(2, '0'),
+      month: months[date.getMonth()],
+      iso: isoFromDate(date),
+      isToday: index === 0,
+      slots: times,
+    };
+  });
+}
+
+function isoFromDate(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
@@ -94,7 +128,8 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedHospital, setSelectedHospital] = useState('');
-  const [selectedDate, setSelectedDate] = useState('2026-08-24');
+  const [selectedDate, setSelectedDate] = useState(isoToday());
+  const [doctorNameQuery, setDoctorNameQuery] = useState('');
   const [consultationType, setConsultationType] = useState<'in_person' | 'video'>('in_person');
   const [sortBy, setSortBy] = useState('next_available');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -351,17 +386,28 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
     experience: doc.experience || `${doc.experienceYears || 10}+ Years Experience`,
     consultationFee: doc.consultationFee || 500,
     image: doc.image || '/src/assets/images/doctor_ravi_teja_1787230351201.jpg',
+    hospitalId: doc.hospitalId,
     consultationType: doc.consultationType || 'both',
-    availableSlots: doc.availableSlots || [
-      { day: 'Today', date: '29', month: 'Aug', isToday: true, slots: ['10:00 AM', '04:00 PM'] },
-    ],
+    availableSlots: buildUpcomingSlots(),
   }));
+
+  const patientId = user?.patientId || userProfile.patientId;
+  const pendingDoctorIds = new Set(
+    (collections.appointments || [])
+      .filter((item: any) => {
+        const samePatient = item.patientId === patientId || (user?.phone && item.phone === user.phone);
+        const pending = ['Pending', 'Requested'].includes(String(item.status || 'Pending'));
+        return samePatient && pending;
+      })
+      .map((item: any) => item.doctorId)
+  );
 
   // Filtering doctors
   const filteredDoctors = doctorsSource.filter(doc => {
     if (selectedSpeciality && doc.speciality !== selectedSpeciality) return false;
     if (selectedDistrict && doc.district !== selectedDistrict) return false;
     if (selectedHospital && !doc.hospital.toLowerCase().includes(selectedHospital.toLowerCase())) return false;
+    if (doctorNameQuery.trim() && !doc.name.toLowerCase().includes(doctorNameQuery.trim().toLowerCase())) return false;
     return true;
   });
 
@@ -369,7 +415,8 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
     setSelectedSpeciality('');
     setSelectedDistrict('');
     setSelectedHospital('');
-    setSelectedDate('2026-08-24');
+    setDoctorNameQuery('');
+    setSelectedDate(isoToday());
     setConsultationType('in_person');
   };
 
@@ -378,6 +425,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
       onOpenModal('register_patient');
       return;
     }
+    if (pendingDoctorIds.has(doctor.id)) return;
     const slotIdx = selectedSlotIndex[doctor.id] || 0;
     const selectedSlotDay = doctor.availableSlots?.[slotIdx] || doctor.availableSlots?.[0];
     const slotTime = selectedSlotDay?.slots?.[0] || '10:00 AM';
@@ -390,6 +438,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
       await create('appointments', {
         patientName: user?.name || userProfile.name,
         patientId: user?.patientId || userProfile.patientId,
+        userId: user?.id,
         phone: user?.phone || userProfile.phone,
         doctorId: doctor.id,
         doctorName: doctor.name,
@@ -666,6 +715,20 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
               {/* Form Controls */}
               <div className="p-4 sm:p-5 space-y-4">
                 
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">Doctor name</label>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="search"
+                      value={doctorNameQuery}
+                      onChange={(e) => setDoctorNameQuery(e.target.value)}
+                      placeholder="Search by doctor name"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                    />
+                  </div>
+                </div>
+
                 {/* 1. Specialization */}
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-slate-700">Specialization</label>
@@ -736,6 +799,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
                   <div className="relative">
                     <input
                       type="date"
+                      min={isoToday()}
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white cursor-pointer"
@@ -877,6 +941,7 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
             >
               {filteredDoctors.map((doc) => {
                 const activeSlotIdx = selectedSlotIndex[doc.id] || 0;
+                const waitingOnDoctor = pendingDoctorIds.has(doc.id);
 
                 return (
                   <div 
@@ -970,10 +1035,11 @@ export const BookAppointmentPage: React.FC<BookAppointmentPageProps> = ({
                       {/* Part 3: Action Buttons (Right 2.5 cols) */}
                       <div className="lg:col-span-3 flex flex-col gap-2 w-full lg:w-44 ml-auto border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
                         <button
+                          disabled={waitingOnDoctor || bookingBusy}
                           onClick={() => handleBookClick(doc)}
-                          className="bg-[#00703c] hover:bg-[#005830] active:bg-[#004224] text-white text-xs font-black uppercase py-2.5 px-4 rounded-md shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="bg-[#00703c] hover:bg-[#005830] active:bg-[#004224] disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed text-white text-xs font-black uppercase py-2.5 px-4 rounded-md shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <span>Book Appointment</span>
+                          <span>{waitingOnDoctor ? 'Awaiting doctor' : 'Book Appointment'}</span>
                         </button>
 
                         <button

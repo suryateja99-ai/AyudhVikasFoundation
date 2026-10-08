@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Calendar,
@@ -41,6 +41,7 @@ import {
   User
 } from 'lucide-react';
 import { useLiveData } from '../context/LiveDataContext';
+import { useAuth } from '../context/AuthContext';
 
 interface PatientInsuranceBookingPageProps {
   onBackToDashboard?: () => void;
@@ -75,6 +76,7 @@ export const PatientInsuranceBookingPage: React.FC<PatientInsuranceBookingPagePr
   embedded = false
 }) => {
   const { create } = useLiveData();
+  const { user } = useAuth();
   // Navigation active tab
   const [activeSideNav, setActiveSideNav] = useState('Insurance Booking');
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,12 +87,12 @@ export const PatientInsuranceBookingPage: React.FC<PatientInsuranceBookingPagePr
 
   // Form Fields
   const [formData, setFormData] = useState({
-    fullName: 'Ramesh Kumar',
-    dob: '1985-06-15',
-    displayDob: '15/06/1985',
-    gender: 'Male',
-    mobileNumber: '9876543210',
-    email: 'ramesh.kumar@gmail.com',
+    fullName: '',
+    dob: '',
+    displayDob: '',
+    gender: '',
+    mobileNumber: '',
+    email: '',
     occupation: 'Private Employee',
     city: 'Warangal',
     pincode: '506001',
@@ -100,10 +102,26 @@ export const PatientInsuranceBookingPage: React.FC<PatientInsuranceBookingPagePr
 
   // Family Members state (for Step 2)
   const [familyMembers, setFamilyMembers] = useState([
-    { id: 1, relation: 'Self', name: 'Ramesh Kumar', age: 38, gender: 'Male' },
-    { id: 2, relation: 'Spouse', name: 'Sunitha Kumar', age: 34, gender: 'Female' },
-    { id: 3, relation: 'Child 1', name: 'Aarav Kumar', age: 8, gender: 'Male' }
+    { id: 1, relation: 'Self', name: '', age: 0, gender: '' },
   ]);
+
+  useEffect(() => {
+    if (!user) return;
+    setFormData((prev) => ({
+      ...prev,
+      fullName: user.name || prev.fullName,
+      gender: user.gender || prev.gender,
+      mobileNumber: user.phone || prev.mobileNumber,
+      email: user.email || prev.email,
+      city: user.district || prev.city,
+    }));
+    setFamilyMembers((prev) => prev.map((m) => m.relation === 'Self' ? {
+      ...m,
+      name: user.name || m.name,
+      age: Number(user.age || m.age || 0),
+      gender: user.gender || m.gender,
+    } : m));
+  }, [user]);
 
   // Interactive Modals
   const [showPlanModal, setShowPlanModal] = useState(false);

@@ -236,7 +236,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
   // Registered Patients List for Dr. Ravi Teja (persisted in localStorage)
   const [registeredPatients, setRegisteredPatients] = useState<DoctorPatientRecord[]>(() =>
-    getSavedState('ayudh_doc_registeredPatients', INITIAL_REGISTERED_PATIENTS)
+    getSavedState('ayudh_doc_registeredPatients', [])
   );
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [patientFilterTier, setPatientFilterTier] = useState<string>('All');
@@ -285,93 +285,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   });
 
   // 5 Today's Appointments matching exact image (dynamic state to support direct walk-ins)
-  const [todaysAppointments, setTodaysAppointments] = useState([
-    {
-      id: 'APT-01',
-      time: '09:30',
-      period: 'AM',
-      patientName: 'Ramesh Kumar',
-      age: 56,
-      gender: 'Male',
-      type: 'Follow-up',
-      reason: 'ECG Review',
-      status: 'Confirmed',
-      statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-300',
-      avatar: '/src/assets/images/patient_avatar_1787229395408.jpg',
-      phone: '9876543210',
-      bp: '128/82 mmHg',
-      heartRate: '72 bpm',
-      lastVisit: '10 May 2024'
-    },
-    {
-      id: 'APT-02',
-      time: '10:30',
-      period: 'AM',
-      patientName: 'Lakshmi Devi',
-      age: 48,
-      gender: 'Female',
-      type: 'Consultation',
-      reason: 'Chest Pain',
-      status: 'Arrived',
-      statusColor: 'bg-sky-50 text-sky-700 border-sky-300',
-      avatar: '/src/assets/images/support_agent_female_1785560510481.jpg',
-      phone: '9440123456',
-      bp: '142/90 mmHg',
-      heartRate: '86 bpm',
-      lastVisit: 'First Visit'
-    },
-    {
-      id: 'APT-03',
-      time: '11:30',
-      period: 'AM',
-      patientName: 'Suresh Babu',
-      age: 66,
-      gender: 'Male',
-      type: 'Consultation',
-      reason: 'BP & Sugar',
-      status: 'Confirmed',
-      statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-300',
-      avatar: '/src/assets/images/doctor_prakash_kumar_1787230378706.jpg',
-      phone: '9848011223',
-      bp: '150/95 mmHg',
-      heartRate: '78 bpm',
-      lastVisit: '15 Apr 2024'
-    },
-    {
-      id: 'APT-04',
-      time: '12:30',
-      period: 'PM',
-      patientName: 'Anitha Reddy',
-      age: 48,
-      gender: 'Female',
-      type: 'Follow-up',
-      reason: 'Medication Review',
-      status: 'Pending',
-      statusColor: 'bg-amber-50 text-amber-700 border-amber-300',
-      avatar: '/src/assets/images/doctor_anusha_reddy_1787230366958.jpg',
-      phone: '9989012345',
-      bp: '120/80 mmHg',
-      heartRate: '70 bpm',
-      lastVisit: '02 May 2024'
-    },
-    {
-      id: 'APT-05',
-      time: '02:00',
-      period: 'PM',
-      patientName: 'Venkatesh',
-      age: 56,
-      gender: 'Male',
-      type: 'Consultation',
-      reason: 'Heart Checkup',
-      status: 'Confirmed',
-      statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-300',
-      avatar: '/src/assets/images/partner_doctor_kims_1787229821989.jpg',
-      phone: '9701234567',
-      bp: '130/85 mmHg',
-      heartRate: '74 bpm',
-      lastVisit: 'First Visit'
-    }
-  ]);
+  const [todaysAppointments, setTodaysAppointments] = useState<any[]>([]);
 
   // Handler: When a patient is verified via QR Code scan or Member ID
   const handlePatientVerified = (patient: VerifiedAyudhPatient, method: string) => {
@@ -1085,7 +999,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        {liveAppointments.length || todaysAppointments.length}
+                        {liveAppointments.length}
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         Today's Appointments
@@ -1219,6 +1133,9 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                   {/* 5 Appointments Rows */}
                   <div className="space-y-2 divide-y divide-slate-100">
+                    {!liveAppointments.length && !todaysAppointments.length && (
+                      <div className="text-xs text-slate-500 py-6 text-center">No appointments for today yet.</div>
+                    )}
                     {(liveAppointments.length
                       ? liveAppointments.map((item: any) => ({
                           id: item.id,

@@ -99,8 +99,7 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
   };
 
   useEffect(() => {
-    if (!collections.health_camps.length) return;
-    const mapped = collections.health_camps.map((camp: any) => ({
+    const mapped = (collections.health_camps || []).map((camp: any) => ({
       id: camp.id,
       name: camp.name || camp.title,
       category: camp.category || 'General Medicine',
@@ -120,168 +119,8 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
     setCompletedCamps(mapped.filter((c: HealthCampItem) => c.status === 'Completed' || c.status === 'Cancelled'));
   }, [collections.health_camps]);
 
-  // State for upcoming camps list
-  const [upcomingCamps, setUpcomingCamps] = useState<HealthCampItem[]>([
-    {
-      id: 'HC-UP-01',
-      name: 'Free Diabetes Screening Camp',
-      category: 'Diabetes & Metabolism',
-      location: 'Mulugu, Warangal',
-      district: 'Mulugu',
-      date: '25 May 2024',
-      time: '9:00 AM - 1:00 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Upcoming',
-      doctorsInvolved: 8,
-      leadDoctor: 'Dr. Ravi Teja (Chief Endocrinologist)',
-      venue: 'Govt High School Grounds, Mulugu',
-      description: 'Comprehensive blood glucose fasting screening, HbA1c tests, diabetic foot examination, and dietary counselling for rural residents.'
-    },
-    {
-      id: 'HC-UP-02',
-      name: 'General Health Checkup Camp',
-      category: 'General Medicine',
-      location: 'Hanamkonda',
-      district: 'Hanamkonda',
-      date: '27 May 2024',
-      time: '9:30 AM - 1:30 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Upcoming',
-      doctorsInvolved: 12,
-      leadDoctor: 'Dr. S. K. Reddy (General Physician)',
-      venue: 'Community Hall, Nakkalagutta, Hanamkonda',
-      description: 'Full vitals check, BP monitoring, ECG screening, paediatric care, and free distribution of essential medications.'
-    },
-    {
-      id: 'HC-UP-03',
-      name: "Women's Health Awareness Camp",
-      category: 'Gynecology & Maternal Care',
-      location: 'Jangaon',
-      district: 'Jangaon',
-      date: '28 May 2024',
-      time: '10:00 AM - 2:00 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Upcoming',
-      doctorsInvolved: 10,
-      leadDoctor: 'Dr. Swapna Priya (Senior Gynaecologist)',
-      venue: 'Town Municipal Hall, Jangaon Main Road',
-      description: 'Maternal health education, anaemia screening, pap smears, breast examination awareness, and nutritional supplements distribution.'
-    },
-    {
-      id: 'HC-UP-04',
-      name: 'Eye Checkup Camp',
-      category: 'Ophthalmology',
-      location: 'Bhupalpally',
-      district: 'Bhupalpally',
-      date: '30 May 2024',
-      time: '9:00 AM - 2:00 PM',
-      organizedBy: 'Sri Sri Holistic Hospitals',
-      status: 'Upcoming',
-      doctorsInvolved: 6,
-      leadDoctor: 'Dr. Rajesh Kumar (Ophthalmic Surgeon)',
-      venue: 'Zilla Parishad High School, Bhupalpally',
-      description: 'Refraction testing, cataract early detection, glaucoma check, and prescription of free reading spectacles.'
-    },
-    {
-      id: 'HC-UP-05',
-      name: 'Free Cardiology Camp',
-      category: 'Cardiology',
-      location: 'Warangal',
-      district: 'Warangal',
-      date: '01 Jun 2024',
-      time: '9:00 AM - 1:00 PM',
-      organizedBy: 'MGM Hospital, Warangal',
-      status: 'Upcoming',
-      doctorsInvolved: 14,
-      leadDoctor: 'Dr. A. Srinivas (Consultant Cardiologist)',
-      venue: 'MGM Hospital Outdoor Auditorium, Warangal',
-      description: '12-lead ECG, 2D Echocardiography triage, hypertension screening, and cardiology specialist consultation.'
-    }
-  ]);
-
-  // State for recent completed camps
-  const [completedCamps, setCompletedCamps] = useState<HealthCampItem[]>([
-    {
-      id: 'HC-CMP-01',
-      name: 'Orthopedic Camp',
-      category: 'Orthopedics & Joint Care',
-      location: 'Mulugu',
-      district: 'Mulugu',
-      date: '20 May 2024',
-      time: '9:00 AM - 3:00 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Completed',
-      beneficiaries: 652,
-      doctorsInvolved: 52,
-      leadDoctor: 'Dr. K. V. Sharma (Orthopedic Specialist)',
-      venue: 'Mulugu Primary Health Centre Grounds',
-      description: 'Joint pain therapy, bone mineral density checks, posture correction, and free distribution of calcium supplements.'
-    },
-    {
-      id: 'HC-CMP-02',
-      name: 'Dental Checkup Camp',
-      category: 'Dental & Oral Health',
-      location: 'Warangal',
-      district: 'Warangal',
-      date: '19 May 2024',
-      time: '9:30 AM - 2:00 PM',
-      organizedBy: 'Kakatiya Dental College & Foundation',
-      status: 'Completed',
-      beneficiaries: 498,
-      doctorsInvolved: 10,
-      leadDoctor: 'Dr. Meenakshi (Dental Surgeon)',
-      venue: 'Shambunipet Community Centre, Warangal',
-      description: 'Dental cavity screening, scaling, oral hygiene education, and free distribution of dental care kits.'
-    },
-    {
-      id: 'HC-CMP-03',
-      name: 'Thyroid Screening Camp',
-      category: 'Endocrinology',
-      location: 'Hanamkonda',
-      district: 'Hanamkonda',
-      date: '18 May 2024',
-      time: '8:30 AM - 1:30 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Completed',
-      beneficiaries: 580,
-      doctorsInvolved: 9,
-      leadDoctor: 'Dr. Harish Rao (Endocrinologist)',
-      venue: 'Subedari Mandal Parishad Office, Hanamkonda',
-      description: 'TSH blood sampling, thyroid nodule palpation, dietary guidance, and prescription management.'
-    },
-    {
-      id: 'HC-CMP-04',
-      name: 'General Health Camp',
-      category: 'General Medicine & Paediatrics',
-      location: 'Bhupalpally',
-      district: 'Bhupalpally',
-      date: '17 May 2024',
-      time: '9:00 AM - 4:00 PM',
-      organizedBy: 'Singareni Collieries & Ayudh Vikas',
-      status: 'Completed',
-      beneficiaries: 723,
-      doctorsInvolved: 11,
-      leadDoctor: 'Dr. V. Prasad (Chief Medical Officer)',
-      venue: 'Singareni Workers Welfare Club, Bhupalpally',
-      description: 'Mass health screening for coal miners and local families with multi-specialty triage and basic diagnostic tests.'
-    },
-    {
-      id: 'HC-CMP-05',
-      name: 'Diabetes Awareness Camp',
-      category: 'Diabetes & Nutrition',
-      location: 'Jangaon',
-      district: 'Jangaon',
-      date: '16 May 2024',
-      time: '9:00 AM - 2:00 PM',
-      organizedBy: 'Ayudh Vikas Foundation',
-      status: 'Completed',
-      beneficiaries: 685,
-      doctorsInvolved: 10,
-      leadDoctor: 'Dr. K. Anjaneyulu (Physician)',
-      venue: 'Zilla Parishad Meeting Hall, Jangaon',
-      description: 'Random blood sugar tests, dietary charts, lifestyle risk assessment, and free metformin distribution for senior citizens.'
-    }
-  ]);
+  const [upcomingCamps, setUpcomingCamps] = useState<HealthCampItem[]>([]);
+  const [completedCamps, setCompletedCamps] = useState<HealthCampItem[]>([]);
 
   // Form state for New Camp Modal
   const [newCamp, setNewCamp] = useState({
@@ -289,7 +128,7 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
     category: 'Free Diabetes Screening Camp',
     location: 'Warangal',
     district: 'Warangal',
-    date: '2024-06-05',
+    date: new Date().toISOString().slice(0, 10),
     time: '9:00 AM - 1:00 PM',
     organizedBy: 'Ayudh Vikas Foundation',
     venue: '',
@@ -300,9 +139,9 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
 
   // Filtered upcoming camps
   const filteredUpcoming = upcomingCamps.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          c.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          c.organizedBy.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (c.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (c.organizedBy || '').toLowerCase().includes(searchQuery.toLowerCase());
     if (activeFilter === 'All') return matchesSearch;
     if (activeFilter === 'Upcoming') return matchesSearch && c.status === 'Upcoming';
     if (activeFilter === 'Completed') return false; // Handled in completed table
@@ -312,9 +151,9 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
 
   // Filtered completed camps
   const filteredCompleted = completedCamps.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          c.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          c.organizedBy.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (c.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (c.organizedBy || '').toLowerCase().includes(searchQuery.toLowerCase());
     if (activeFilter === 'All') return matchesSearch;
     if (activeFilter === 'Completed') return matchesSearch && c.status === 'Completed';
     if (activeFilter === 'Upcoming') return false;
@@ -365,7 +204,7 @@ export const AdminHealthCampsPage: React.FC<AdminHealthCampsPageProps> = ({ onBa
       category: 'Free Diabetes Screening Camp',
       location: 'Warangal',
       district: 'Warangal',
-      date: '2024-06-05',
+      date: new Date().toISOString().slice(0, 10),
       time: '9:00 AM - 1:00 PM',
       organizedBy: 'Ayudh Vikas Foundation',
       venue: '',

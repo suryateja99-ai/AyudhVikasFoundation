@@ -14,7 +14,7 @@ import {
   FileText,
   Bell
 } from 'lucide-react';
-import { UPCOMING_CAMPS, PARTNER_HOSPITALS } from '../data/mockData';
+
 import { ActiveModal } from '../types';
 import { useLiveData } from '../context/LiveDataContext';
 
@@ -27,15 +27,17 @@ interface WidgetsSectionProps {
 
 export const WidgetsSection: React.FC<WidgetsSectionProps> = ({ onOpenModal, onSelectCamp, onSignInClick, onBecomePartnerClick }) => {
   const { collections } = useLiveData();
-  const camps = collections.health_camps.length ? collections.health_camps : UPCOMING_CAMPS;
-  const hospitals = collections.hospitals.length ? collections.hospitals : PARTNER_HOSPITALS;
+  const camps = collections.health_camps || [];
+  const hospitals = collections.hospitals || [];
   const [currentHospitalIdx, setCurrentHospitalIdx] = useState(0);
 
   const prevHospital = () => {
+    if (!hospitals.length) return;
     setCurrentHospitalIdx((prev) => (prev === 0 ? hospitals.length - 1 : prev - 1));
   };
 
   const nextHospital = () => {
+    if (!hospitals.length) return;
     setCurrentHospitalIdx((prev) => (prev === hospitals.length - 1 ? 0 : prev + 1));
   };
 
@@ -71,6 +73,9 @@ export const WidgetsSection: React.FC<WidgetsSectionProps> = ({ onOpenModal, onS
               </div>
 
               <div className="space-y-2.5">
+                {camps.length === 0 && (
+                  <div className="text-[11px] text-slate-500 bg-white border border-dashed border-slate-200 rounded-lg p-2.5">No camps published yet.</div>
+                )}
                 {camps.slice(0, 3).map((camp: any) => (
                   <div key={camp.id} className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between text-xs hover:border-emerald-500 transition-colors">
                     <div>
@@ -90,7 +95,7 @@ export const WidgetsSection: React.FC<WidgetsSectionProps> = ({ onOpenModal, onS
 
             <button
               onClick={() => {
-                if (onSelectCamp) onSelectCamp(UPCOMING_CAMPS[0].title);
+                if (onSelectCamp) onSelectCamp(camps[0]?.title || camps[0]?.name || '');
                 onOpenModal('camp_register');
               }}
               className="w-full bg-[#008a00] hover:bg-[#007000] text-white font-black text-xs uppercase py-2.5 rounded-lg shadow-sm transition-all cursor-pointer mt-4"

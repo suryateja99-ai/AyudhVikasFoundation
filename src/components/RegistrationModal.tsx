@@ -42,6 +42,8 @@ import {
 import { DISTRICTS, SPECIALITIES } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from './BrandLogo';
+import { api } from '../lib/api';
+import { MOBILE_OTP_ENABLED } from '../lib/featureFlags';
 
 export type RegistrationRole = 'patient' | 'doctor' | 'hospital' | 'marketing' | 'ambulance' | 'lab' | 'volunteer' | 'social_organizer';
 
@@ -83,6 +85,15 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [otpVerified, setOtpVerified] = useState(false);
   const [otpTimer, setOtpTimer] = useState(30);
   const [otpLoading, setOtpLoading] = useState(false);
+  const [otpRequestId, setOtpRequestId] = useState('');
+  const [mobileOtpToken, setMobileOtpToken] = useState('');
+  const [otpHint, setOtpHint] = useState('');
+
+  useEffect(() => {
+    if (!otpSent || otpVerified || otpTimer <= 0) return;
+    const id = window.setTimeout(() => setOtpTimer((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(id);
+  }, [otpSent, otpVerified, otpTimer]);
 
   // Validation Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -530,27 +541,54 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     });
   };
 
+  const resetOtpState = () => {
+    setOtpSent(false);
+    setOtpValue('');
+    setOtpVerified(false);
+    setOtpRequestId('');
+    setMobileOtpToken('');
+    setOtpHint('');
+    setOtpTimer(30);
+  };
+
   // OTP Handlers
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     if (!patientData.mobileNumber || patientData.mobileNumber.length < 10) {
       setErrors(prev => ({ ...prev, mobileNumber: 'దయచేసి సరైన 10 అంకెల మొబైల్ నంబరును నమోదు చేయండి / Please enter valid 10-digit mobile number' }));
       return;
     }
-    setErrors(prev => ({ ...prev, mobileNumber: '' }));
+    setErrors(prev => ({ ...prev, mobileNumber: '', otp: '' }));
     setOtpLoading(true);
-    setTimeout(() => {
-      setOtpLoading(false);
+    try {
+      const res = await api.sendMobileOtp({ phone: patientData.mobileNumber, purpose: 'registration' });
       setOtpSent(true);
-      setOtpTimer(30);
-    }, 600);
+      setOtpVerified(false);
+      setOtpValue('');
+      setOtpRequestId(res.requestId);
+      setMobileOtpToken('');
+      setOtpTimer(res.retryAfterSeconds || 30);
+      setOtpHint(res.devOtp ? `Development OTP: ${res.devOtp}` : (res.message || 'OTP sent to mobile.'));
+    } catch (err: any) {
+      setErrors(prev => ({ ...prev, otp: err.message || 'Unable to send OTP. Please try again.' }));
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
-  const handleVerifyOtp = () => {
-    if (otpValue === '123456' || otpValue.length === 6 || otpValue === '999999' || otpValue === '111111') {
+  const handleVerifyOtp = async () => {
+    try {
+      const res = await api.verifyMobileOtp({
+        phone: patientData.mobileNumber,
+        purpose: 'registration',
+        otp: otpValue,
+        requestId: otpRequestId,
+      });
       setOtpVerified(true);
+      setMobileOtpToken(res.otpToken);
+      setOtpHint(res.message || 'Mobile number verified successfully.');
       setErrors(prev => ({ ...prev, otp: '' }));
-    } else {
-      setErrors(prev => ({ ...prev, otp: 'దయచేసి సరైన OTP నమోదు చేయండి (Demo OTP: 123456)' }));
+    } catch (err: any) {
+      setErrors(prev => ({ ...prev, otp: err.message || 'Please enter a valid OTP.' }));
     }
   };
 
@@ -578,6 +616,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
     if (step === 2) {
       if (!patientData.mobileNumber || patientData.mobileNumber.length < 10) errs.mobileNumber = '10 అంకెల మొబైల్ సంఖ్య తప్పనిసరి / 10-digit Mobile is required';
+      if (MOBILE_OTP_ENABLED && (!otpVerified || !mobileOtpToken)) errs.otp = 'Please verify the mobile OTP before continuing.';
       Object.assign(errs, passwordErrors(patientData.password, patientData.confirmPassword));
       if (!patientData.doorNo.trim()) errs.doorNo = 'ఇంటి నంబరు తప్పనిసరి / Door No is required';
       if (!patientData.villageOrTown.trim()) errs.villageOrTown = 'గ్రామం / పట్టణం తప్పనిసరి / Village or Town is required';
@@ -624,6 +663,11 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       setPatientStep(2);
       return;
     }
+    if (MOBILE_OTP_ENABLED && (!otpVerified || !mobileOtpToken)) {
+      setErrors({ otp: 'Please verify the mobile OTP before registration.' });
+      setPatientStep(2);
+      return;
+    }
 
     try {
       const { confirmPassword, ...safePatient } = patientData;
@@ -632,6 +676,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         ...safePatient,
         ...paymentPayloadForRole('patient'),
         password: patientData.password,
+        mobileOtpToken,
+        mobileOtpPurpose: 'registration',
       });
       const patientId = res.patientId || res.user.patientId || `AV-PAT-2026-${Math.floor(10000 + Math.random() * 90000)}`;
       const referenceNo = res.referenceNo || `AV-REG-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -1112,9 +1158,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <label className="font-bold text-slate-800">
-                          మొబైల్ సంఖ్య / Primary Mobile Number (OTP Verification) <span className="text-red-500">*</span>
+                          మొబైల్ సంఖ్య / Primary Mobile Number{MOBILE_OTP_ENABLED ? ' (OTP Verification)' : ''} <span className="text-red-500">*</span>
                         </label>
-                        {otpVerified && (
+                        {MOBILE_OTP_ENABLED && otpVerified && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
                             <CheckCircle2 className="w-3.5 h-3.5" /> మొబైల్ ధ్రువీకరించబడింది / Verified
                           </span>
@@ -1126,9 +1172,13 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           <input
                             type="tel"
                             maxLength={10}
-                            disabled={otpVerified}
+                            disabled={MOBILE_OTP_ENABLED && otpVerified}
                             value={patientData.mobileNumber}
-                            onChange={e => setPatientData({ ...patientData, mobileNumber: e.target.value.replace(/\D/g, '') })}
+                            onChange={e => {
+                              const nextMobile = e.target.value.replace(/\D/g, '');
+                              setPatientData({ ...patientData, mobileNumber: nextMobile });
+                              if (nextMobile !== patientData.mobileNumber) resetOtpState();
+                            }}
                             placeholder="10-digit mobile number"
                             className={`w-full p-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 ${
                               errors.mobileNumber ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-300'
@@ -1136,14 +1186,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           />
                         </div>
 
-                        {!otpVerified && (
+                        {MOBILE_OTP_ENABLED && !otpVerified && (
                           <button
                             type="button"
-                            disabled={otpLoading}
+                            disabled={otpLoading || (otpSent && otpTimer > 0)}
                             onClick={handleSendOtp}
                             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-lg transition-colors cursor-pointer shrink-0"
                           >
-                            {otpLoading ? 'Sending...' : otpSent ? 'Resend OTP' : 'Send OTP (OTP పంపు)'}
+                            {otpLoading ? 'Sending...' : otpSent && otpTimer > 0 ? `Resend in ${otpTimer}s` : otpSent ? 'Resend OTP' : 'Send OTP (OTP పంపు)'}
                           </button>
                         )}
                       </div>
@@ -1151,14 +1201,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       {errors.mobileNumber && <p className="text-red-600 text-[11px] font-semibold">{errors.mobileNumber}</p>}
 
                       {/* OTP Input Sub-box if OTP sent */}
-                      {otpSent && !otpVerified && (
+                      {MOBILE_OTP_ENABLED && otpSent && !otpVerified && (
                         <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row items-center gap-2">
                           <input
                             type="text"
                             maxLength={6}
                             value={otpValue}
                             onChange={e => setOtpValue(e.target.value)}
-                            placeholder="Enter 6-digit OTP (e.g. 123456)"
+                            placeholder="Enter 6-digit OTP"
                             className="w-full sm:w-60 p-2 bg-white border border-blue-400 rounded-lg text-center tracking-widest font-black focus:ring-2 focus:ring-blue-600 focus:outline-none"
                           />
                           <button
@@ -1168,7 +1218,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                           >
                             Verify OTP (ధ్రువీకరించు)
                           </button>
-                          <span className="text-[10px] text-slate-500 font-medium">Demo OTP: 123456</span>
+                          {otpHint && <span className="text-[10px] text-slate-500 font-medium">{otpHint}</span>}
                         </div>
                       )}
                       {errors.otp && <p className="text-red-600 text-[11px] font-semibold">{errors.otp}</p>}

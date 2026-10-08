@@ -64,13 +64,13 @@ export const HomeServicePage: React.FC<HomeServicePageProps> = ({
   onSignInClick,
   isLoggedIn = false,
   userProfile = {
-    name: 'Ramesh Kumar',
-    displayName: 'Ramesh K.',
-    patientId: 'AVP100245',
-    phone: '9876543210',
-    email: 'ramesh.kumar@example.com',
-    address: 'H.No 2-8-450, Subedari, Hanamkonda, Warangal - 506001',
-    image: '/src/assets/images/patient_avatar_1787229395408.jpg'
+    name: '',
+    displayName: '',
+    patientId: '',
+    phone: '',
+    email: '',
+    address: '',
+    image: ''
   },
   onNavigateDashboard,
   onLogout,
@@ -80,7 +80,7 @@ export const HomeServicePage: React.FC<HomeServicePageProps> = ({
   const { isGuest } = useAuth();
   // Form State
   const [patientName, setPatientName] = useState(isLoggedIn ? userProfile.name : '');
-  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '9876543210' : '');
+  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '' : '');
   const [cityDistrict, setCityDistrict] = useState('');
   const [serviceRequired, setServiceRequired] = useState('');
   const [preferredDate, setPreferredDate] = useState('');

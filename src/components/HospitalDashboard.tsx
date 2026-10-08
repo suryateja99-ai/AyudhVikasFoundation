@@ -30,7 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import { Doctor, HospitalPartner, HospitalVisitRequest, SeniorDoctor } from '../types';
-import { INITIAL_HOSPITAL_VISIT_REQUESTS, PARTNER_HOSPITALS, SPECIALITIES } from '../data/mockData';
+import { SPECIALITIES } from '../data/mockData';
 import { PatientVerificationSection, VerifiedAyudhPatient } from './PatientVerificationSection';
 import { ClinicalSessionPanel } from './ClinicalSessionPanel';
 import { useAuth } from '../context/AuthContext';
@@ -238,7 +238,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const liveHospitals = collections.hospitals.length ? (collections.hospitals as HospitalPartner[]) : PARTNER_HOSPITALS;
+  const liveHospitals = (collections.hospitals || []) as HospitalPartner[];
   const currentHospital = useMemo(() => {
     return (
       liveHospitals.find((hospital) => hospital.id === user?.hospitalId) ||
@@ -250,19 +250,17 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
 
   const allVisitRequests = (visitRequests && Array.isArray(visitRequests)
     ? visitRequests
-    : collections.visit_requests.length
-      ? collections.visit_requests
-      : INITIAL_HOSPITAL_VISIT_REQUESTS) as HospitalVisitRequest[];
+    : collections.visit_requests || []) as HospitalVisitRequest[];
 
   const hospitalRequests = useMemo(() => {
-    const hospitalName = currentHospital.name.toLowerCase();
-    const shortName = currentHospital.shortName.toLowerCase();
+    const hospitalName = (currentHospital.name || '').toLowerCase();
+    const shortName = (currentHospital.shortName || '').toLowerCase();
     return allVisitRequests.filter((request) => {
       const requestHospitalName = request.hospitalName?.toLowerCase() || '';
       return (
         request.hospitalId === currentHospital.id ||
-        requestHospitalName.includes(hospitalName) ||
-        requestHospitalName.includes(shortName)
+        (hospitalName && requestHospitalName.includes(hospitalName)) ||
+        (shortName && requestHospitalName.includes(shortName))
       );
     });
   }, [allVisitRequests, currentHospital.id, currentHospital.name, currentHospital.shortName]);
@@ -727,7 +725,7 @@ export const HospitalDashboard: React.FC<HospitalDashboardProps> = ({
             </button>
           </div>
           <div className="divide-y divide-slate-100">
-            {(hospitalRequests.length ? hospitalRequests : INITIAL_HOSPITAL_VISIT_REQUESTS).slice(0, 5).map((request, index) => (
+            {hospitalRequests.slice(0, 5).map((request, index) => (
               <div key={request.id} className="py-3 grid grid-cols-[48px_1fr_auto] gap-3 items-center text-xs">
                 <div className="font-black text-slate-950">
                   {['09:30', '10:30', '11:30', '12:30', '02:00'][index] || '03:00'}

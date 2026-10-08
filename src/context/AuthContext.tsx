@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, getToken, setToken } from '../lib/api';
+import { api, applyAuthSession, clearAuthSession, getToken, isRememberedSession, setToken } from '../lib/api';
 import { roleHome } from '../lib/roleRoutes';
 
 export type UserRole =
@@ -63,7 +63,16 @@ interface AuthContextValue {
   loading: boolean;
   isLoggedIn: boolean;
   isGuest: boolean;
-  login: (identifier: string, password: string) => Promise<AuthUser>;
+  login: (identifier: string, password: string) => Promise<AuthUser | {
+    requiresOtp: true;
+    phone?: string;
+    phoneHint?: string;
+    requestId?: string;
+    retryAfterSeconds?: number;
+    devOtp?: string;
+    message?: string;
+  }>;
+  loginWithOtp: (phone: string, otp: string, requestId?: string, rememberMe?: boolean) => Promise<AuthUser>;
   loginAsGuest: () => AuthUser;
   register: (payload: any) => Promise<{ user: AuthUser; patientId?: string; referenceNo?: string }>;
   logout: () => void;
@@ -87,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const refreshed = await api.refresh();
           if (!cancelled) {
-            setToken(refreshed.token);
+            applyAuthSession({ token: refreshed.token, rememberMe: refreshed.rememberMe !== false && isRememberedSession() || Boolean(refreshed.rememberMe) });
             setTokenState(refreshed.token);
             setUser(normalizeUser(refreshed.user));
             setLoading(false);
@@ -105,14 +114,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const res = await api.me();
         if (!cancelled) {
           if (res.token) {
-            setToken(res.token);
+            applyAuthSession({ token: res.token, rememberMe: isRememberedSession() });
             setTokenState(res.token);
           }
           setUser(normalizeUser(res.user));
         }
       } catch {
         if (!cancelled) {
-          setToken(null);
+          clearAuthSession();
           setTokenState(null);
           setUser(null);
         }
@@ -128,8 +137,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (identifier: string, password: string) => {
     const res = await api.login(identifier, password);
+    if (res.requiresOtp) {
+      return {
+        requiresOtp: true as const,
+        phone: res.phone,
+        phoneHint: res.phoneHint,
+        requestId: res.requestId,
+        retryAfterSeconds: res.retryAfterSeconds,
+        devOtp: res.devOtp,
+        message: res.message,
+      };
+    }
     localStorage.removeItem(GUEST_FLAG);
-    setToken(res.token);
+    applyAuthSession({ token: res.token, rememberMe: res.rememberMe, deviceTrustToken: res.deviceTrustToken });
+    setTokenState(res.token || null);
+    const next = normalizeUser(res.user) as AuthUser;
+    setUser(next);
+    navigate(roleHome(next.primaryRole || next.role), { replace: true });
+    return next;
+  }, [navigate]);
+
+  const loginWithOtp = useCallback(async (phone: string, otp: string, requestId?: string, rememberMe = false) => {
+    const res = await api.loginWithOtp({ phone, otp, requestId, rememberMe });
+    localStorage.removeItem(GUEST_FLAG);
+    applyAuthSession({ token: res.token, rememberMe: Boolean(rememberMe || res.rememberMe), deviceTrustToken: res.deviceTrustToken });
     setTokenState(res.token);
     const next = normalizeUser(res.user) as AuthUser;
     setUser(next);
@@ -149,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = useCallback(async (payload: any) => {
     const res = await api.register(payload);
     localStorage.removeItem(GUEST_FLAG);
-    setToken(res.token);
+    applyAuthSession({ token: res.token, rememberMe: true, deviceTrustToken: (res as any).deviceTrustToken });
     setTokenState(res.token);
     const next = normalizeUser(res.user) as AuthUser;
     setUser(next);
@@ -161,7 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void api.logout().catch(() => undefined);
     localStorage.removeItem(GUEST_FLAG);
     localStorage.removeItem(PRIMARY_ROLE_KEY);
-    setToken(null);
+    clearAuthSession();
     setTokenState(null);
     setUser(null);
     navigate('/', { replace: true });
@@ -203,13 +234,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoggedIn: !!user,
       isGuest: !!user?.isGuest,
       login,
+      loginWithOtp,
       loginAsGuest,
       register,
       logout,
       updateProfile,
       switchRole,
     }),
-    [user, token, loading, login, loginAsGuest, register, logout, updateProfile, switchRole]
+    [user, token, loading, login, loginWithOtp, loginAsGuest, register, logout, updateProfile, switchRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

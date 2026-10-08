@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiUrl } from '../lib/api';
 import { useAuthOptional } from './AuthContext';
+import { showDeviceNotification } from '../lib/push';
 
 export type CollectionName =
   | 'hospitals'
@@ -202,6 +203,10 @@ export const LiveDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const action = event.action || (event.event === 'record_created' ? 'create' : event.event === 'record_deleted' ? 'delete' : 'update');
           const record = event.record || event.data || { id: event.id };
           applyChange(event.collection, action, record);
+          const isNewNote = event.collection === 'notifications' && (action === 'create' || event.event === 'notification_created');
+          if (isNewNote && record?.userId && record.userId === auth?.user?.id) {
+            void showDeviceNotification(record);
+          }
         } catch (err) {
           console.warn('Bad live event', err);
         }

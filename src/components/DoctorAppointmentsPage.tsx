@@ -97,7 +97,7 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
 
   // Confirmation modal state
   const [confirmingItem, setConfirmingItem] = useState<DoctorAppointmentItem | null>(null);
-  const [confirmDate, setConfirmDate] = useState('2024-08-22');
+  const [confirmDate, setConfirmDate] = useState(new Date().toISOString().slice(0, 10));
   const [confirmTime, setConfirmTime] = useState('10:00 AM');
 
   // Success toast state
@@ -111,9 +111,8 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
   React.useEffect(() => {
     const doctorId = user?.doctorId;
     const live = (collections.appointments || []).filter((a: any) =>
-      !doctorId || a.doctorId === doctorId || String(a.doctorName || '').toLowerCase().includes('ravi teja')
+      !doctorId || a.doctorId === doctorId
     );
-    if (!live.length) return;
     setAppointments(() => {
       const mapped = live.map((a: any) => ({
         id: a.id,
@@ -145,295 +144,7 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
   }, [collections.appointments, user]);
 
   // Initial Master Data for Dr. Ravi Teja's Appointments
-  const [appointments, setAppointments] = useState<DoctorAppointmentItem[]>([
-    // Confirmed Appointments
-    {
-      id: 'APT-101',
-      patientName: 'Ramesh Kumar',
-      age: 56,
-      gender: 'Male',
-      phone: '9876543210',
-      location: 'Hanamkonda, Warangal',
-      avatar: '/src/assets/images/patient_avatar_1787229395408.jpg',
-      bloodGroup: 'B+',
-      bp: '128/82 mmHg',
-      heartRate: '72 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '09:30 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-01',
-      visitType: 'Follow-up',
-      reason: 'Post-Angioplasty ECG & Stent Evaluation',
-      symptoms: ['Mild exertional breathlessness', 'Routine follow-up'],
-      status: 'Confirmed',
-      bookedAt: '20 Aug 2024, 02:15 PM',
-      previousVisitsCount: 3,
-      patientNotes: 'Previous stent placed 8 months ago in LAD. Reports attached.'
-    },
-    {
-      id: 'APT-102',
-      patientName: 'Lakshmi Devi',
-      age: 48,
-      gender: 'Female',
-      phone: '9440123456',
-      location: 'Naimnagar, Warangal',
-      avatar: '/src/assets/images/support_agent_female_1785560510481.jpg',
-      bloodGroup: 'O+',
-      bp: '142/90 mmHg',
-      heartRate: '86 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '10:30 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-02',
-      visitType: 'Consultation',
-      reason: 'Chest Pain & Palpitations on Exertion',
-      symptoms: ['Chest tightness', 'Morning dizziness', 'High BP history'],
-      status: 'Arrived',
-      bookedAt: '21 Aug 2024, 10:00 AM',
-      previousVisitsCount: 1,
-      patientNotes: 'Patient arrived in OPD waiting lounge. BP recorded by nurse: 142/90.'
-    },
-    {
-      id: 'APT-103',
-      patientName: 'Suresh Babu',
-      age: 66,
-      gender: 'Male',
-      phone: '9848011223',
-      location: 'Kazipet, Warangal',
-      avatar: '/src/assets/images/doctor_prakash_kumar_1787230378706.jpg',
-      bloodGroup: 'A+',
-      bp: '150/95 mmHg',
-      heartRate: '78 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '11:30 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-03',
-      visitType: 'Consultation',
-      reason: 'Hypertension & Lipid Profile Assessment',
-      symptoms: ['Elevated blood pressure', 'Fatigue'],
-      status: 'Confirmed',
-      bookedAt: '21 Aug 2024, 04:30 PM',
-      previousVisitsCount: 4,
-      patientNotes: 'Taking Telmisartan 40mg. Fasting sugar reports also available.'
-    },
-    {
-      id: 'APT-104',
-      patientName: 'K. Rajeshwar Rao',
-      age: 52,
-      gender: 'Male',
-      phone: '9908123890',
-      location: 'Subedari, Warangal',
-      avatar: '/src/assets/images/doctor_ravi_teja_1787230351201.jpg',
-      bloodGroup: 'AB+',
-      bp: '135/88 mmHg',
-      heartRate: '74 bpm',
-      appointmentDate: '23 Aug 2024',
-      appointmentTime: '10:00 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-04',
-      visitType: 'ECG & Echo Review',
-      reason: 'TMT & 2D Echo Screening Evaluation',
-      symptoms: ['Occasional skipped heartbeats', 'Family history of CAD'],
-      status: 'Confirmed',
-      bookedAt: '21 Aug 2024, 06:10 PM',
-      previousVisitsCount: 2,
-      patientNotes: '2D Echo images uploaded in Ayudh Vikas Cloud portal.'
-    },
-    {
-      id: 'APT-105',
-      patientName: 'Sunitha Kumari',
-      age: 41,
-      gender: 'Female',
-      phone: '9700445566',
-      location: 'Maddur, Siddipet',
-      avatar: '/src/assets/images/doctor_anusha_reddy_1787230366958.jpg',
-      bloodGroup: 'B-',
-      bp: '124/78 mmHg',
-      heartRate: '68 bpm',
-      appointmentDate: '23 Aug 2024',
-      appointmentTime: '11:45 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-05',
-      visitType: 'Follow-up',
-      reason: 'Heart Rhythm Medication Review',
-      symptoms: ['Follow-up for beta-blocker dosage adjustment'],
-      status: 'Confirmed',
-      bookedAt: '21 Aug 2024, 07:00 PM',
-      previousVisitsCount: 1,
-      patientNotes: 'Patient traveled 40km from Maddur.'
-    },
-
-    // Pending Appointments (Waiting for Doctor's Action)
-    {
-      id: 'APT-201',
-      patientName: 'Anitha Reddy',
-      age: 48,
-      gender: 'Female',
-      phone: '9989012345',
-      location: 'Girmajipet, Warangal',
-      avatar: '/src/assets/images/doctor_anusha_reddy_1787230366958.jpg',
-      bloodGroup: 'A+',
-      bp: '120/80 mmHg',
-      heartRate: '70 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '12:30 PM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-06',
-      visitType: 'Follow-up',
-      reason: 'Medication Tolerance & Routine Cardiology Review',
-      symptoms: ['Mild fatigue on long walks', 'Needs prescription refill'],
-      status: 'Pending',
-      bookedAt: '21 Aug 2024, 09:20 PM',
-      previousVisitsCount: 2,
-      patientNotes: 'Prefers morning slot between 12:00 PM and 01:00 PM.'
-    },
-    {
-      id: 'APT-202',
-      patientName: 'Venkateshwarlu G.',
-      age: 59,
-      gender: 'Male',
-      phone: '9000112244',
-      location: 'Jangaon District',
-      avatar: '/src/assets/images/partner_doctor_kims_1787229821989.jpg',
-      bloodGroup: 'O+',
-      bp: '158/98 mmHg',
-      heartRate: '88 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '02:00 PM',
-      timeSlotPeriod: 'Afternoon',
-      tokenNumber: 'TK-07',
-      visitType: 'Consultation',
-      reason: 'Persistent High BP & Shortness of Breath',
-      symptoms: ['Night orthopnea', 'Swelling in feet for 3 days', 'Severe hypertension'],
-      status: 'Pending',
-      bookedAt: '22 Aug 2024, 07:15 AM',
-      previousVisitsCount: 0,
-      patientNotes: 'Urgent consultation requested by patient attendant.'
-    },
-    {
-      id: 'APT-203',
-      patientName: 'Ch. Madhusudhan Rao',
-      age: 63,
-      gender: 'Male',
-      phone: '9123456780',
-      location: 'Mulugu Road, Warangal',
-      avatar: '/src/assets/images/patient_avatar_1787229395408.jpg',
-      bloodGroup: 'B+',
-      bp: '138/86 mmHg',
-      heartRate: '76 bpm',
-      appointmentDate: '23 Aug 2024',
-      appointmentTime: '04:30 PM',
-      timeSlotPeriod: 'Evening',
-      tokenNumber: 'TK-08',
-      visitType: 'Consultation',
-      reason: 'Second Opinion for Coronary Angiogram Advice',
-      symptoms: ['TMT positive report from district hospital', 'Mild angina on stairs'],
-      status: 'Pending',
-      bookedAt: '22 Aug 2024, 08:30 AM',
-      previousVisitsCount: 0,
-      patientNotes: 'Wants Dr. Ravi Teja to review CD of previous angiogram.'
-    },
-    {
-      id: 'APT-204',
-      patientName: 'Padma Jyothi',
-      age: 39,
-      gender: 'Female',
-      phone: '9849922110',
-      location: 'Balasamudram, Hanamkonda',
-      avatar: '/src/assets/images/support_agent_female_1785560510481.jpg',
-      bloodGroup: 'AB+',
-      bp: '118/76 mmHg',
-      heartRate: '92 bpm',
-      appointmentDate: '24 Aug 2024',
-      appointmentTime: '05:00 PM',
-      timeSlotPeriod: 'Evening',
-      tokenNumber: 'TK-09',
-      visitType: 'Consultation',
-      reason: 'Frequent Episodes of Tachycardia & Anxiety',
-      symptoms: ['Sudden racing heart beats while resting', 'Sweating episodes'],
-      status: 'Pending',
-      bookedAt: '22 Aug 2024, 09:10 AM',
-      previousVisitsCount: 0,
-      patientNotes: 'Holter 24-hr monitoring advised by local physician.'
-    },
-
-    // Rejected Appointments (With Prior Stated Reason)
-    {
-      id: 'APT-301',
-      patientName: 'Mohd. Imran Khan',
-      age: 34,
-      gender: 'Male',
-      phone: '9705511223',
-      location: 'Mandi Bazar, Warangal',
-      avatar: '/src/assets/images/doctor_prakash_kumar_1787230378706.jpg',
-      bloodGroup: 'A-',
-      bp: '122/80 mmHg',
-      heartRate: '80 bpm',
-      appointmentDate: '21 Aug 2024',
-      appointmentTime: '11:00 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-X1',
-      visitType: 'Consultation',
-      reason: 'Chronic Migraine & Neurological Headaches',
-      symptoms: ['Throbbing unilateral headache', 'Visual aura'],
-      status: 'Rejected',
-      bookedAt: '20 Aug 2024, 01:00 PM',
-      rejectedAt: '20 Aug 2024, 03:30 PM',
-      rejectionReason: 'Specialty Mismatch: Patient requires Senior Neurologist / General Medicine consultation for migraine workup. Re-directed to Dr. Prakash Kumar (MD Gen Med).',
-      previousVisitsCount: 0,
-      patientNotes: 'Auto-SMS sent to patient with Neurology OPD timing.'
-    },
-    {
-      id: 'APT-302',
-      patientName: 'T. Mallesh Yadav',
-      age: 71,
-      gender: 'Male',
-      phone: '9988776655',
-      location: 'Parkal, Warangal Rural',
-      avatar: '/src/assets/images/partner_doctor_kims_1787229821989.jpg',
-      bloodGroup: 'O+',
-      bp: '160/100 mmHg',
-      heartRate: '95 bpm',
-      appointmentDate: '21 Aug 2024',
-      appointmentTime: '03:00 PM',
-      timeSlotPeriod: 'Afternoon',
-      tokenNumber: 'TK-X2',
-      visitType: 'Emergency Review',
-      reason: 'Severe Chest Crushing Pain & Acute Breathlessness',
-      symptoms: ['Acute diaphoresis', 'Radiating left arm pain', 'Unstable vitals'],
-      status: 'Rejected',
-      bookedAt: '21 Aug 2024, 01:30 PM',
-      rejectedAt: '21 Aug 2024, 01:40 PM',
-      rejectionReason: 'Emergency Red Flag: Patient is presenting with Acute Coronary Syndrome symptoms. Advised immediate 108 Emergency Casualty / ICCU admission at MGM Hospital instead of routine OPD slot.',
-      previousVisitsCount: 1,
-      patientNotes: 'Ayudh Vikas Emergency Casualty Ambulance was dispatched immediately.'
-    },
-    {
-      id: 'APT-303',
-      patientName: 'Shravani K.',
-      age: 28,
-      gender: 'Female',
-      phone: '9848123499',
-      location: 'Subedari, Hanamkonda',
-      avatar: '/src/assets/images/support_agent_female_1785560510481.jpg',
-      bloodGroup: 'B+',
-      bp: '110/70 mmHg',
-      heartRate: '75 bpm',
-      appointmentDate: '22 Aug 2024',
-      appointmentTime: '08:00 AM',
-      timeSlotPeriod: 'Morning',
-      tokenNumber: 'TK-X3',
-      visitType: 'Consultation',
-      reason: 'General Health Fitness Certificate',
-      symptoms: ['Employment pre-medical checkup'],
-      status: 'Rejected',
-      bookedAt: '21 Aug 2024, 08:00 PM',
-      rejectedAt: '21 Aug 2024, 08:30 PM',
-      rejectionReason: 'Doctor on Emergency Cath Lab / OT duty at 08:00 AM. Requested patient to rebook slot after 10:00 AM or consult the Wellness OPD doctor.',
-      previousVisitsCount: 0,
-      patientNotes: 'Patient notified via WhatsApp notification.'
-    }
-  ]);
+  const [appointments, setAppointments] = useState<DoctorAppointmentItem[]>([]);
 
   // Quick Rejection Preset Reasons for Fast Doctor Triage
   const quickRejectionPresets = [
@@ -465,14 +176,24 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
     
     if (!matchesSearch) return false;
 
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     if (dateFilter === 'today') {
-      return item.appointmentDate.includes('22 Aug');
+      return String(item.appointmentDate).includes(fmt(today).slice(0, 6)) || String(item.appointmentDate).includes(today.toISOString().slice(0, 10));
     }
     if (dateFilter === 'tomorrow') {
-      return item.appointmentDate.includes('23 Aug');
+      return String(item.appointmentDate).includes(fmt(tomorrow).slice(0, 6)) || String(item.appointmentDate).includes(tomorrow.toISOString().slice(0, 10));
     }
     if (dateFilter === 'this_week') {
-      return item.appointmentDate.includes('Aug 2024');
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay());
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+      const parsed = Date.parse(item.appointmentDate);
+      if (!Number.isNaN(parsed)) return parsed >= start.getTime() && parsed < end.getTime();
+      return true;
     }
 
     return true;

@@ -11,13 +11,24 @@ export const NotificationBell: React.FC<{ variant?: 'light' | 'dark' }> = ({ var
 
   if (!isLoggedIn || user?.isGuest) return null;
 
-  const notifications = (collections.notifications || []).filter((n: any) => n.userId === user?.id);
+  const notifications = (collections.notifications || [])
+    .filter((n: any) => n.userId === user?.id)
+    .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   const unreadNotifications = notifications.filter((n: any) => !n.read);
 
   const markRead = async (id: string) => {
     try {
       const res = await api.markNotificationRead(id);
       if (res.item) applyChange('notifications', 'update', res.item);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const markAll = async () => {
+    try {
+      const res = await api.markAllNotificationsRead();
+      (res.items || []).forEach((item: any) => applyChange('notifications', 'update', item));
     } catch {
       /* ignore */
     }
@@ -40,7 +51,14 @@ export const NotificationBell: React.FC<{ variant?: 'light' | 'dark' }> = ({ var
 
       {showDropdown && (
         <div className="absolute right-0 mt-2 w-80 bg-white text-slate-800 shadow-lg rounded-lg p-3 max-h-96 overflow-y-auto z-50 border border-slate-200">
-          <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Notifications</div>
+          <div className="text-[11px] font-black uppercase text-slate-500 mb-2 flex items-center justify-between">
+            <span>Notifications ({unreadNotifications.length})</span>
+            {unreadNotifications.length > 0 && (
+              <button type="button" onClick={() => void markAll()} className="text-emerald-700 normal-case font-bold">
+                Mark all read
+              </button>
+            )}
+          </div>
           {unreadNotifications.length > 0 ? (
             unreadNotifications.map((n: any) => (
               <button

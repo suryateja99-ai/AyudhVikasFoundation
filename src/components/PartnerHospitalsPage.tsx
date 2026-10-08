@@ -15,7 +15,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { ActiveModal, HospitalPartner } from '../types';
-import { PARTNER_HOSPITALS, HOSPITAL_TESTIMONIALS, HOSPITAL_PHOTOS, DISTRICTS } from '../data/mockData';
+import { HOSPITAL_TESTIMONIALS, HOSPITAL_PHOTOS, DISTRICTS } from '../data/mockData';
 import { useLiveData } from '../context/LiveDataContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,9 +35,7 @@ export const PartnerHospitalsPage: React.FC<PartnerHospitalsPageProps> = ({
   const [districtFilter, setDistrictFilter] = useState('All');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const hospitals: HospitalPartner[] = collections.hospitals.length
-    ? collections.hospitals
-    : PARTNER_HOSPITALS;
+  const hospitals: HospitalPartner[] = collections.hospitals || [];
 
   const filtered = useMemo(() => {
     if (districtFilter === 'All') return hospitals;
@@ -49,7 +47,7 @@ export const PartnerHospitalsPage: React.FC<PartnerHospitalsPageProps> = ({
   const avgRating =
     hospitals.length
       ? (hospitals.reduce((sum, h) => sum + (h.rating || 0), 0) / hospitals.length).toFixed(1)
-      : '4.8';
+      : '0';
 
   const photoFor = (hospital: HospitalPartner, idx: number) =>
     hospital.image ||

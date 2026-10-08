@@ -20,8 +20,6 @@ import {
 } from 'lucide-react';
 import { ActiveModal, HealthCamp } from '../types';
 import {
-  UPCOMING_CAMPS,
-  COMPLETED_CAMPS,
   DISTRICTS,
   getDistrictCoordinates,
   haversineKm
@@ -66,9 +64,7 @@ export const HealthCampsPage: React.FC<HealthCampsPageProps> = ({
   const [slidePaused, setSlidePaused] = useState(false);
   const [districtFilter, setDistrictFilter] = useState('All');
 
-  const liveCamps: HealthCamp[] = collections.health_camps.length
-    ? collections.health_camps
-    : [...UPCOMING_CAMPS, ...COMPLETED_CAMPS];
+  const liveCamps: HealthCamp[] = collections.health_camps || [];
 
   const upcomingCamps = useMemo(
     () =>
@@ -80,13 +76,9 @@ export const HealthCampsPage: React.FC<HealthCampsPageProps> = ({
 
   const completedCamps = useMemo(() => {
     const done = liveCamps.filter((camp) => camp.status === 'Completed');
-    const source = done.length ? done : COMPLETED_CAMPS;
-    return source.map((camp) => ({
+    return done.map((camp) => ({
       ...camp,
-      image:
-        camp.image ||
-        COMPLETED_CAMPS.find((item) => item.id === camp.id)?.image ||
-        FALLBACK_CAMP_IMAGE
+      image: camp.image || FALLBACK_CAMP_IMAGE
     }));
   }, [liveCamps]);
 

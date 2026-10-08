@@ -47,6 +47,9 @@ interface LabTestsPageProps {
     image: string;
     phone?: string;
     email?: string;
+    age?: string | number;
+    gender?: string;
+    address?: string;
   };
   onNavigateDashboard?: () => void;
   onLogout?: () => void;
@@ -60,12 +63,15 @@ export const LabTestsPage: React.FC<LabTestsPageProps> = ({
   onSignInClick,
   isLoggedIn = false,
   userProfile = {
-    name: 'Ramesh Kumar',
-    displayName: 'Ramesh K.',
-    patientId: 'AVP100245',
-    phone: '9876543210',
-    email: 'ramesh.kumar@example.com',
-    image: '/src/assets/images/patient_avatar_1787229395408.jpg'
+    name: '',
+    displayName: '',
+    patientId: '',
+    phone: '',
+    email: '',
+    age: '',
+    gender: '',
+    address: '',
+    image: ''
   },
   onNavigateDashboard,
   onLogout,
@@ -79,16 +85,16 @@ export const LabTestsPage: React.FC<LabTestsPageProps> = ({
   const [selectedPackage, setSelectedPackage] = useState('');
   const [selectedLab, setSelectedLab] = useState('');
   const [patientName, setPatientName] = useState(isLoggedIn ? userProfile.name : '');
-  const [age, setAge] = useState(isLoggedIn ? '42' : '');
-  const [gender, setGender] = useState(isLoggedIn ? 'Male' : '');
-  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '9876543210' : '');
-  const [email, setEmail] = useState(isLoggedIn ? userProfile.email || 'ramesh.kumar@example.com' : '');
-  const [address, setAddress] = useState(isLoggedIn ? 'Subedari, Hanamkonda, Warangal - 506001' : '');
+  const [age, setAge] = useState(isLoggedIn && userProfile.age ? String(userProfile.age) : '');
+  const [gender, setGender] = useState(isLoggedIn ? (userProfile.gender || '') : '');
+  const [mobileNumber, setMobileNumber] = useState(isLoggedIn ? userProfile.phone || '' : '');
+  const [email, setEmail] = useState(isLoggedIn ? userProfile.email || '' : '');
+  const [address, setAddress] = useState(isLoggedIn ? userProfile.address || '' : '');
   const [cityDistrict, setCityDistrict] = useState('Warangal');
   
   // Sample collection selection: 'home' | 'lab'
   const [collectionType, setCollectionType] = useState<'home' | 'lab'>('home');
-  const [preferredDate, setPreferredDate] = useState('2026-08-21');
+  const [preferredDate, setPreferredDate] = useState(new Date().toISOString().slice(0, 10));
   const [preferredTime, setPreferredTime] = useState('08:30 AM - 10:00 AM');
 
   // Additional Info
@@ -123,7 +129,7 @@ export const LabTestsPage: React.FC<LabTestsPageProps> = ({
     setAddress('');
     setCityDistrict('Warangal');
     setCollectionType('home');
-    setPreferredDate('2026-08-21');
+    setPreferredDate(new Date().toISOString().slice(0, 10));
     setPreferredTime('08:30 AM - 10:00 AM');
     setFasting('Not Required');
     setMedicalCondition('');

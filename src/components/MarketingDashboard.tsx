@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   HeartPulse,
   Phone,
@@ -77,14 +77,25 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
     assignedTo: 'Rohit Verma'
   });
 
-  // Recent Leads Data
-  const [leadsList, setLeadsList] = useState([
-    { id: 'LD-101', name: 'Rohit Verma', problem: 'Heart Problem', location: 'Warangal', time: '2 min ago', initials: 'PS', bg: 'bg-blue-100 text-blue-700', status: 'New' },
-    { id: 'LD-102', name: 'Priya Sharma', problem: 'General Checkup', location: 'Hanamkonda', time: '12 min ago', initials: 'PS', bg: 'bg-teal-100 text-teal-700', status: 'Contacted' },
-    { id: 'LD-103', name: 'Suresh Kumar', problem: 'Diabetes Consultation', location: 'Bhupalpally', time: '1 hr ago', initials: 'PS', bg: 'bg-amber-100 text-amber-700', status: 'In Discussion' },
-    { id: 'LD-104', name: 'Neha Reddy', problem: 'Orthopedic Issue', location: 'Jangaon', time: '2 hr ago', initials: 'NC', bg: 'bg-purple-100 text-purple-700', status: 'Converted' },
-    { id: 'LD-105', name: 'Anil Reddy', problem: 'Thyroid Problem', location: 'Jangaon', time: '3 hr ago', initials: 'AM', bg: 'bg-pink-100 text-pink-700', status: 'New' },
-  ]);
+  const [leadsList, setLeadsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const mapped = (collections.leads || []).map((lead: any) => {
+      const name = lead.patientName || lead.name || 'Lead';
+      const initials = String(name).split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'LD';
+      return {
+        id: lead.id,
+        name,
+        problem: lead.requirement || lead.problem || 'Enquiry',
+        location: lead.location || '',
+        time: lead.dateAdded || lead.createdAt || '',
+        initials,
+        bg: 'bg-blue-100 text-blue-700',
+        status: lead.status || 'New',
+      };
+    });
+    setLeadsList(mapped);
+  }, [collections.leads]);
 
   // Handle adding a new lead
   const handleAddNewLead = (e: React.FormEvent) => {

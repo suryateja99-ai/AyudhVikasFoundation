@@ -48,6 +48,9 @@ const COLLECTIONS = [
   'fund360_eligibility_records',
   'auth_sessions',
   'audit_logs',
+  'mobile_otps',
+  'trusted_devices',
+  'push_subscriptions',
 ];
 
 const SENSITIVE_USER_DATA_KEYS = new Set([
@@ -228,6 +231,13 @@ export function createDb(onChange) {
     await collection('auth_sessions').createIndex({ refreshTokenHash: 1 }, { unique: true, sparse: true });
     await collection('auth_sessions').createIndex({ userId: 1, revokedAt: 1 });
     await collection('auth_sessions').createIndex({ expiresAt: 1 });
+    await collection('mobile_otps').createIndex({ phone: 1, purpose: 1, createdAt: -1 });
+    await collection('mobile_otps').createIndex({ expiresAt: 1 });
+    await collection('mobile_otps').createIndex({ verificationTokenHash: 1 }, { sparse: true });
+    await collection('trusted_devices').createIndex({ tokenHash: 1 }, { sparse: true });
+    await collection('trusted_devices').createIndex({ userId: 1, revokedAt: 1 });
+    await collection('push_subscriptions').createIndex({ endpoint: 1 }, { unique: true, sparse: true });
+    await collection('push_subscriptions').createIndex({ userId: 1 });
   }
 
   async function importLocalIfMongoEmpty() {

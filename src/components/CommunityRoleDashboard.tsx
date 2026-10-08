@@ -2,7 +2,7 @@ import React from 'react';
 import { LogOut, Tent, Users, MapPin, CheckCircle2, Handshake } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { useAuth } from '../context/AuthContext';
-import { UPCOMING_CAMPS } from '../data/mockData';
+import { useLiveData } from '../context/LiveDataContext';
 import { Fund360Button } from './Fund360Button';
 
 interface CommunityRoleDashboardProps {
@@ -15,6 +15,8 @@ export const CommunityRoleDashboard: React.FC<CommunityRoleDashboardProps> = ({
   onNavigateHome
 }) => {
   const { user } = useAuth();
+  const { collections } = useLiveData();
+  const upcomingCamps = (collections.health_camps || []).filter((camp: any) => camp.status === 'Upcoming' || camp.status === 'Ongoing' || !camp.status);
   const isVolunteer = user?.role === 'volunteer';
   const title = isVolunteer ? 'Volunteer Desk' : 'Social Organizer Desk';
 
@@ -77,10 +79,13 @@ export const CommunityRoleDashboard: React.FC<CommunityRoleDashboardProps> = ({
             Upcoming Camps To Support
           </h2>
           <div className="space-y-2">
-            {UPCOMING_CAMPS.slice(0, 5).map((camp) => (
+            {upcomingCamps.length === 0 && (
+              <div className="text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg p-3">No upcoming camps assigned yet.</div>
+            )}
+            {upcomingCamps.slice(0, 5).map((camp: any) => (
               <div key={camp.id} className="flex items-center justify-between border border-slate-200 rounded-lg p-3">
                 <div>
-                  <div className="text-xs font-black text-slate-800">{camp.title}</div>
+                  <div className="text-xs font-black text-slate-800">{camp.title || camp.name}</div>
                   <div className="text-[11px] text-slate-500">{camp.location} · {camp.date}</div>
                 </div>
                 <span className="text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 px-2 py-1 rounded flex items-center gap-1">

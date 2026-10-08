@@ -93,7 +93,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   onRequireRegister
 }) => {
   const { user, updateProfile, isGuest } = useAuth();
-  const { collections, create, loading } = useLiveData();
+  const { collections, create, loading, applyChange } = useLiveData();
   const liveNotifications = (collections.notifications || []).filter((n: any) => n.userId === user?.id && !n.read);
   const [activeSidebarTab, setActiveSidebarTab] = useState<string>(activeTab || initialTab || 'dashboard');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -134,7 +134,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   const [newReminderTime, setNewReminderTime] = useState('');
 
   // Wallet & balance
-  const [walletBalance, setWalletBalance] = useState(1250);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [addFundsModal, setAddFundsModal] = useState(false);
   const [fundsAmount, setFundsAmount] = useState('500');
 
@@ -142,10 +142,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   const [ticketModal, setTicketModal] = useState(false);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketDescription, setTicketDescription] = useState('');
-  const [ticketsList, setTicketsList] = useState([
-    { id: 'AVT-8921', subject: 'Clarification on Gold Card pharmacy discount in Subedari', date: '22 May 2025', status: 'In Progress', priority: 'High' },
-    { id: 'AVT-8710', subject: 'Lab report download link expired for lipid profile', date: '18 Apr 2025', status: 'Resolved', priority: 'Medium' }
-  ]);
+  const [ticketsList, setTicketsList] = useState<any[]>([]);
 
   // Feedback state
   const [feedbackRating, setFeedbackRating] = useState(5);
@@ -160,13 +157,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   const [recordDoctor, setRecordDoctor] = useState('Dr. Prashanth Reddy');
 
   // Records list
-  const [recordsList, setRecordsList] = useState<any[]>([
-    { id: 1, title: 'Cardiology Consultation Rx & Diet Plan', doctor: 'Dr. Prashanth Reddy', facility: 'CARE Hospitals Warangal', date: '28 Apr 2025', type: 'Prescription', file: 'Rx_Cardiology_28Apr2025.pdf', size: '1.2 MB' },
-    { id: 2, title: 'Complete Blood Count (CBC) Diagnostic Report', doctor: 'Dr. S. K. Roy (Pathologist)', facility: 'Vijaya Diagnostic Centre', date: '20 May 2025', type: 'Lab Report', file: 'CBC_Report_AVP100245.pdf', size: '2.4 MB' },
-    { id: 3, title: 'Lipid Profile & Liver Function Test (LFT)', doctor: 'Dr. Anusha Reddy', facility: 'Lucid Medical Diagnostics', date: '15 Apr 2025', type: 'Lab Report', file: 'Lipid_LFT_15Apr2025.pdf', size: '3.1 MB' },
-    { id: 4, title: 'Chest X-Ray PA View & Report', doctor: 'Dr. Harish Rao (Radiologist)', facility: 'Yashoda Hospitals Hanamkonda', date: '10 Feb 2025', type: 'Scan / X-Ray', file: 'Chest_XRay_10Feb2025.pdf', size: '8.4 MB' },
-    { id: 5, title: 'General Physician Review & Medication Chart', doctor: 'Dr. Radhika Sharma', facility: 'Apollo Hospitals Warangal', date: '12 Jan 2025', type: 'Prescription', file: 'General_Physician_12Jan2025.pdf', size: '850 KB' }
-  ]);
+  const [recordsList, setRecordsList] = useState<any[]>([]);
   const [recordsFilter, setRecordsFilter] = useState('All');
 
   // Toast notification simulation
@@ -207,7 +198,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   useEffect(() => {
     const pid = user?.patientId || profileData.patientId;
     const mine = (list: any[]) => list.filter((item) => !pid || item.patientId === pid || !item.patientId);
-    if (collections.tickets.length) setTicketsList(mine(collections.tickets));
+    setTicketsList(mine(collections.tickets || []));
     const txs = mine(collections.wallet_txns);
     if (txs[0]?.balanceAfter !== undefined) setWalletBalance(txs[0].balanceAfter);
   }, [collections, user, profileData.patientId]);
@@ -512,6 +503,17 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               <span className="truncate leading-tight">KM Complex, Hunter Road, Warangal</span>
             </div>
 
+            {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
+              <button
+                type="button"
+                onClick={() => {
+                  void import('../lib/push').then((mod) => mod.enableWebPush());
+                }}
+                className="hidden sm:inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-800"
+              >
+                Enable device alerts
+              </button>
+            )}
             {/* Notifications Bell */}
             <div className="relative">
               <button 
@@ -531,37 +533,43 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-fadeIn">
                   <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">Notifications ({Math.max(3, liveNotifications.length)})</span>
-                    <button onClick={() => setShowNotifications(false)} className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer">Mark all read</button>
+                    <span className="text-xs font-bold text-slate-800">Notifications ({liveNotifications.length})</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await api.markAllNotificationsRead();
+                          (res.items || []).forEach((item: any) => applyChange('notifications', 'update', item));
+                        } catch {
+                          /* ignore */
+                        }
+                        setShowNotifications(false);
+                      }}
+                      className="text-[10px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                    >
+                      Mark all read
+                    </button>
                   </div>
-                  <div className="divide-y divide-slate-100 text-xs">
-                    {liveNotifications.map((note: any) => (
-                      <div key={note.id} className="px-3 py-2 hover:bg-slate-50 cursor-pointer" onClick={() => setShowNotifications(false)}>
+                  <div className="divide-y divide-slate-100 text-xs max-h-80 overflow-y-auto">
+                    {liveNotifications.length ? liveNotifications.map((note: any) => (
+                      <div
+                        key={note.id}
+                        className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                        onClick={async () => {
+                          try {
+                            const res = await api.markNotificationRead(note.id);
+                            if (res.item) applyChange('notifications', 'update', res.item);
+                          } catch {
+                            /* ignore */
+                          }
+                          setShowNotifications(false);
+                        }}
+                      >
                         <div className="font-bold text-slate-800">{note.title}</div>
                         <div className="text-slate-500 text-[10px]">{note.message}</div>
                       </div>
-                    ))}
-                    <div 
-                      onClick={() => { setShowNotifications(false); handleSidebarClick('my_appointment'); }}
-                      className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <div className="font-bold text-slate-800">Appointment Confirmed</div>
-                      <div className="text-slate-500 text-[10px]">Dr. Prashanth Reddy on 28 May 2025 at 10:30 AM</div>
-                    </div>
-                    <div 
-                      onClick={() => { setShowNotifications(false); handleSidebarClick('membership'); }}
-                      className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <div className="font-bold text-slate-800">Free Health Camp</div>
-                      <div className="text-slate-500 text-[10px]">Diabetes Screening this Monday at Public Park</div>
-                    </div>
-                    <div 
-                      onClick={() => { setShowNotifications(false); handleSidebarClick('reports'); }}
-                      className="px-3 py-2 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <div className="font-bold text-slate-800">Lab Results Ready</div>
-                      <div className="text-slate-500 text-[10px]">Complete Blood Count report uploaded</div>
-                    </div>
+                    )) : (
+                      <p className="px-3 py-4 text-slate-500">No new notifications</p>
+                    )}
                   </div>
                 </div>
               )}

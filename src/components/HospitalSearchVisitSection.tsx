@@ -34,7 +34,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { HospitalPartner, SeniorDoctor, HospitalVisitRequest, SymptomItem, ActiveModal } from '../types';
-import { PARTNER_HOSPITALS, SYMPTOMS_LIST, DISTRICTS, SPECIALITIES, INITIAL_HOSPITAL_VISIT_REQUESTS } from '../data/mockData';
+import { SYMPTOMS_LIST, DISTRICTS, SPECIALITIES } from '../data/mockData';
 import { useLiveData } from '../context/LiveDataContext';
 import { api } from '../lib/api';
 import { BrandLogo } from './BrandLogo';
@@ -62,12 +62,12 @@ interface HospitalSearchVisitSectionProps {
 
 export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProps> = ({
   userProfile = {
-    name: 'Ramesh Kumar',
-    phone: '9876543210',
-    patientId: 'AVP100245',
-    age: 42,
-    gender: 'Male',
-    bloodGroup: 'B+ve'
+    name: '',
+    phone: '',
+    patientId: '',
+    age: undefined,
+    gender: '',
+    bloodGroup: ''
   },
   visitRequests,
   onAddVisitRequest,
@@ -84,10 +84,8 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
   const [submittingVisit, setSubmittingVisit] = useState(false);
   const [searching, setSearching] = useState(false);
   const [apiHospitals, setApiHospitals] = useState<HospitalPartner[] | null>(null);
-  const liveHospitals = collections.hospitals.length ? collections.hospitals : PARTNER_HOSPITALS;
-  const liveRequests = liveLoading && !collections.visit_requests.length
-    ? INITIAL_HOSPITAL_VISIT_REQUESTS
-    : collections.visit_requests;
+  const liveHospitals = collections.hospitals || [];
+  const liveRequests = collections.visit_requests || [];
 
   const allRequests: HospitalVisitRequest[] = ((visitRequests && Array.isArray(visitRequests))
     ? visitRequests
@@ -115,8 +113,8 @@ export const HospitalSearchVisitSection: React.FC<HospitalSearchVisitSectionProp
   // Visit Request Form State
   const [visitPatientName, setVisitPatientName] = useState(userProfile.name);
   const [visitPatientPhone, setVisitPatientPhone] = useState(userProfile.phone);
-  const [visitPatientAge, setVisitPatientAge] = useState(userProfile.age ? String(userProfile.age) : '42');
-  const [visitPatientGender, setVisitPatientGender] = useState(userProfile.gender || 'Male');
+  const [visitPatientAge, setVisitPatientAge] = useState(userProfile.age ? String(userProfile.age) : '');
+  const [visitPatientGender, setVisitPatientGender] = useState(userProfile.gender || '');
   const [visitDepartment, setVisitDepartment] = useState('');
   const [visitChiefComplaint, setVisitChiefComplaint] = useState('');
   const [visitDate, setVisitDate] = useState('2026-05-30');
