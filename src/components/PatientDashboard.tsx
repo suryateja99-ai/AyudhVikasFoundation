@@ -66,6 +66,7 @@ import { LiveStatusBadge } from './LiveStatusBadge';
 import { BrandLogo } from './BrandLogo';
 import { PatientMyAppointmentsPage } from './PatientMyAppointmentsPage';
 import { Fund360Button } from './Fund360Button';
+import { belongsToPatient, formatApptDate, formatApptTime, isUpcomingAppointment } from '../lib/liveOwnership';
 
 interface PatientDashboardProps {
   onLogout: () => void;
@@ -119,12 +120,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   });
 
   // Reminders state
-  const [reminders, setReminders] = useState<any[]>([
-    { id: 1, title: 'Take Metformin 500mg', time: '08:00 AM (After Breakfast)', type: 'Medication', enabled: true },
-    { id: 2, title: 'Blood Pressure Log', time: '02:00 PM (Daily)', type: 'Health Log', enabled: true },
-    { id: 3, title: 'Evening Brisk Walk (30 mins)', time: '06:00 PM (Daily)', type: 'Exercise', enabled: true },
-    { id: 4, title: 'Take Telmisartan 40mg', time: '09:00 PM (After Dinner)', type: 'Medication', enabled: true }
-  ]);
+  const [reminders, setReminders] = useState<any[]>([]);
   const [medicalLoading, setMedicalLoading] = useState(false);
   const [medicalError, setMedicalError] = useState('');
   const [prescriptionsList, setPrescriptionsList] = useState<any[]>([]);
@@ -197,7 +193,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
 
   useEffect(() => {
     const pid = user?.patientId || profileData.patientId;
-    const mine = (list: any[]) => list.filter((item) => !pid || item.patientId === pid || !item.patientId);
+    const mine = (list: any[]) => list.filter((item) => belongsToPatient(item, user, profileData));
     setTicketsList(mine(collections.tickets || []));
     const txs = mine(collections.wallet_txns);
     if (txs[0]?.balanceAfter !== undefined) setWalletBalance(txs[0].balanceAfter);
@@ -1163,33 +1159,45 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 <p className="text-xs text-slate-500 font-semibold">Scheduled reviews and tele-consultation check-ins</p>
               </div>
 
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-                <div className="flex items-center gap-2 text-emerald-700 font-black text-xs">
-                  <Clock className="w-4 h-4" />
-                  <span>Next Upcoming Follow-Up</span>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div>
-                    <h4 className="text-sm font-black text-slate-900">Dr. Prashanth Reddy (Cardiologist)</h4>
-                    <p className="text-xs text-slate-600 font-semibold mt-0.5">CARE Hospitals, Warangal</p>
-                    <p className="text-xs font-black text-[#00703c] mt-1">Date: 28 May 2025 at 10:30 AM (In-Person OPD)</p>
+              {(() => {
+                const followUps = (collections.appointments || [])
+                  .filter((a: any) => belongsToPatient(a, user, profileData) && isUpcomingAppointment(a) && String(a.visitType || a.reason || '').toLowerCase().includes('follow'))
+                  .concat(
+                    (collections.appointments || []).filter((a: any) => belongsToPatient(a, user, profileData) && isUpcomingAppointment(a))
+                  )
+                  .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.id === item.id) === idx)
+                  .slice(0, 3);
+                if (!followUps.length) {
+                  return (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs text-xs font-semibold text-slate-500">
+                      No follow-up visits scheduled.
+                    </div>
+                  );
+                }
+                return followUps.map((appt: any) => (
+                  <div key={appt.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-700 font-black text-xs">
+                      <Clock className="w-4 h-4" />
+                      <span>Upcoming follow-up</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">{appt.doctorName || 'Doctor'}</h4>
+                        <p className="text-xs text-slate-600 font-semibold mt-0.5">{appt.hospitalName || appt.hospital || ''}</p>
+                        <p className="text-xs font-black text-[#00703c] mt-1">
+                          Date: {formatApptDate(appt)} {formatApptTime(appt) ? `at ${formatApptTime(appt)}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleSidebarClick('appointments')}
+                        className="bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg cursor-pointer"
+                      >
+                        Book / Reschedule
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => showToast('Follow-up reminder set on your calendar!')}
-                      className="bg-[#0f2e5a] text-white text-xs font-bold px-3 py-2 rounded-lg cursor-pointer"
-                    >
-                      Add to Calendar
-                    </button>
-                    <button 
-                      onClick={() => handleSidebarClick('appointments')}
-                      className="bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg cursor-pointer"
-                    >
-                      Reschedule
-                    </button>
-                  </div>
-                </div>
-              </div>
+                ));
+              })()}
             </div>
           )}
 
@@ -1560,9 +1568,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               {(() => {
-                const pid = user?.patientId || profileData.patientId;
-                const myRequests = (collections.visit_requests || []).filter((r: any) => !pid || r.patientId === pid);
-                const myAppts = (collections.appointments || []).filter((a: any) => !pid || a.patientId === pid);
+                const myRequests = (collections.visit_requests || []).filter((r: any) => belongsToPatient(r, user, profileData));
+                const myAppts = (collections.appointments || []).filter((a: any) => belongsToPatient(a, user, profileData));
                 const pending = myRequests.filter((r: any) => String(r.status).toLowerCase() === 'pending').length;
                 const scheduled = myRequests.filter((r: any) => ['accepted', 'scheduled'].includes(String(r.status).toLowerCase())).length;
                 return (
@@ -1730,40 +1737,51 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       </button>
                     </div>
 
-                    {/* Appointment Card */}
-                    <div className="bg-gradient-to-r from-emerald-50/70 via-slate-50 to-blue-50/50 border border-emerald-200/80 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <img 
-                          src="/src/assets/images/doctor_prakash_kumar_1787230378706.jpg" 
-                          alt="Dr. Prashanth Reddy" 
-                          className="w-11 h-11 rounded-xl object-cover border-2 border-emerald-500 shadow-2xs shrink-0"
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-black text-slate-900">Dr. Prashanth Reddy</h4>
-                            <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded">
-                              Confirmed
-                            </span>
+                    {(() => {
+                      const upcoming = (collections.appointments || [])
+                        .filter((a: any) => belongsToPatient(a, user, profileData) && isUpcomingAppointment(a))
+                        .slice(0, 3);
+                      if (!upcoming.length) {
+                        return (
+                          <div className="border border-dashed border-slate-200 rounded-xl p-4 text-xs text-slate-500 font-semibold">
+                            No upcoming doctor appointments. Book a specialist when you need a visit.
                           </div>
-                          <p className="text-[11px] font-bold text-emerald-800">Cardiologist (Heart Specialist)</p>
-                          <p className="text-[10px] text-slate-500 font-medium">CARE Hospitals, Warangal</p>
+                        );
+                      }
+                      return upcoming.map((appt: any) => (
+                        <div key={appt.id} className="bg-gradient-to-r from-emerald-50/70 via-slate-50 to-blue-50/50 border border-emerald-200/80 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <img
+                              src={appt.avatar || appt.doctorImage || '/src/assets/images/doctor_prakash_kumar_1787230378706.jpg'}
+                              alt={appt.doctorName || 'Doctor'}
+                              className="w-11 h-11 rounded-xl object-cover border-2 border-emerald-500 shadow-2xs shrink-0"
+                            />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-black text-slate-900">{appt.doctorName || 'Doctor'}</h4>
+                                <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                  {appt.status || 'Pending'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] font-bold text-emerald-800">{appt.speciality || appt.visitType || 'Consultation'}</p>
+                              <p className="text-[10px] text-slate-500 font-medium">{appt.hospitalName || appt.hospital || ''}</p>
+                            </div>
+                          </div>
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+                            <div className="text-left sm:text-right">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase block">Date & Time</span>
+                              <span className="text-xs font-black text-[#0f2e5a]">{formatApptDate(appt)}</span>
+                              <span className="text-[10px] font-bold text-emerald-700 block">{formatApptTime(appt)}</span>
+                            </div>
+                            {appt.tokenNumber ? (
+                              <span className="mt-1 text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-2 py-1 rounded-md">
+                                Token {appt.tokenNumber}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
-                        <div className="text-left sm:text-right">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase block">Date & Time</span>
-                          <span className="text-xs font-black text-[#0f2e5a]">28 May 2025</span>
-                          <span className="text-[10px] font-bold text-emerald-700 block">10:30 AM</span>
-                        </div>
-                        <button 
-                          onClick={() => showToast('Appointment details sent to WhatsApp & SMS!')}
-                          className="mt-1 text-[10px] font-black text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200 px-2 py-1 rounded-md transition-colors cursor-pointer"
-                        >
-                          View Token #12
-                        </button>
-                      </div>
-                    </div>
+                      ));
+                    })()}
                   </div>
 
                   {/* MY HEALTH SUMMARY */}
@@ -1777,31 +1795,39 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                           My Health Summary & Vitals
                         </h3>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-semibold">Updated 2 days ago</span>
+                      <span className="text-[10px] text-slate-400 font-semibold">{(user as any)?.vitalsUpdatedAt ? String((user as any).vitalsUpdatedAt).slice(0, 10) : 'No recent reading'}</span>
                     </div>
 
+                    {(() => {
+                      const vitals = (user as any)?.vitals || {};
+                      const bp = vitals.bp || (user as any)?.bp || (user as any)?.bloodPressure;
+                      const glucose = vitals.glucose || (user as any)?.glucose;
+                      const hr = vitals.heartRate || (user as any)?.heartRate;
+                      const weight = vitals.weight || (user as any)?.weight;
+                      if (!bp && !glucose && !hr && !weight) {
+                        return <div className="text-xs text-slate-500 font-semibold">No vitals recorded yet. They appear here after a clinic visit or home log.</div>;
+                      }
+                      return (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                       <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">Blood Pressure</span>
-                        <span className="text-sm font-black text-[#0f2e5a]">120 / 80</span>
-                        <span className="text-[9px] text-emerald-600 font-bold block">Normal</span>
+                        <span className="text-sm font-black text-[#0f2e5a]">{bp || '—'}</span>
                       </div>
                       <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">Blood Glucose</span>
-                        <span className="text-sm font-black text-[#0f2e5a]">95 mg/dL</span>
-                        <span className="text-[9px] text-emerald-600 font-bold block">Fasting</span>
+                        <span className="text-sm font-black text-[#0f2e5a]">{glucose || '—'}</span>
                       </div>
                       <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">Heart Rate</span>
-                        <span className="text-sm font-black text-[#0f2e5a]">72 bpm</span>
-                        <span className="text-[9px] text-emerald-600 font-bold block">Resting</span>
+                        <span className="text-sm font-black text-[#0f2e5a]">{hr || '—'}</span>
                       </div>
                       <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">Weight / BMI</span>
-                        <span className="text-sm font-black text-[#0f2e5a]">68 kg</span>
-                        <span className="text-[9px] text-blue-600 font-bold block">BMI 23.1</span>
+                        <span className="text-sm font-black text-[#0f2e5a]">{weight || '—'}</span>
                       </div>
                     </div>
+                      );
+                    })()}
                   </div>
 
                   {/* NEAREST PARTNER HOSPITALS */}
@@ -1824,33 +1850,24 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
-                        <div>
-                          <h4 className="text-xs font-black text-slate-900">CARE Hospitals</h4>
-                          <p className="text-[10px] text-slate-500">Nayeem Nagar, Hanamkonda</p>
-                          <span className="text-[9px] font-bold text-emerald-700">ICU & Emergency Available</span>
+                      {(collections.hospitals || []).slice(0, 2).map((h: any) => (
+                        <div key={h.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-900">{h.name || h.shortName}</h4>
+                            <p className="text-[10px] text-slate-500">{h.area || h.location || h.district || ''}</p>
+                            <span className="text-[9px] font-bold text-emerald-700">{h.speciality || h.type || 'Network hospital'}</span>
+                          </div>
+                          <button
+                            onClick={() => handleSidebarClick('appointments')}
+                            className="text-[10px] font-black text-white bg-[#00703c] px-2.5 py-1 rounded-lg cursor-pointer shrink-0"
+                          >
+                            Book OPD
+                          </button>
                         </div>
-                        <button 
-                          onClick={() => handleSidebarClick('appointments')}
-                          className="text-[10px] font-black text-white bg-[#00703c] px-2.5 py-1 rounded-lg cursor-pointer shrink-0"
-                        >
-                          Book OPD
-                        </button>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between">
-                        <div>
-                          <h4 className="text-xs font-black text-slate-900">Yashoda Hospitals</h4>
-                          <p className="text-[10px] text-slate-500">Hunter Road, Warangal</p>
-                          <span className="text-[9px] font-bold text-emerald-700">Super Speciality</span>
-                        </div>
-                        <button 
-                          onClick={() => handleSidebarClick('appointments')}
-                          className="text-[10px] font-black text-white bg-[#00703c] px-2.5 py-1 rounded-lg cursor-pointer shrink-0"
-                        >
-                          Book OPD
-                        </button>
-                      </div>
+                      ))}
+                      {!(collections.hospitals || []).length && (
+                        <div className="text-xs text-slate-500 font-semibold col-span-2">No partner hospitals listed yet.</div>
+                      )}
                     </div>
                   </div>
 
@@ -1887,7 +1904,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                       </div>
                       <div className="py-1.5 flex items-center justify-between text-[11px]">
                         <span className="text-slate-500 font-semibold">Location:</span>
-                        <span className="font-bold text-slate-800 truncate max-w-[140px]">Hanamkonda, Warangal</span>
+                        <span className="font-bold text-slate-800 truncate max-w-[140px]">{user?.district || profileData.address || '—'}</span>
                       </div>
                     </div>
 

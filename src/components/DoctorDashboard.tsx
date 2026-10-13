@@ -58,6 +58,7 @@ import { BrandLogo } from './BrandLogo';
 import { NotificationBell } from './NotificationBell';
 import { ClinicalSessionPanel } from './ClinicalSessionPanel';
 import { Fund360Button } from './Fund360Button';
+import { belongsToDoctor, formatApptDate, isTodayRecord, parseRecordDate } from '../lib/liveOwnership';
 
 export interface DoctorPatientRecord {
   id: string;
@@ -228,9 +229,21 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [walkInToast, setWalkInToast] = useState<string | null>(null);
   const { user } = useAuth();
   const { collections, loading: liveLoading } = useLiveData();
-  const liveAppointments = (collections.appointments || []).filter((item: any) =>
-    !user?.doctorId || item.doctorId === user.doctorId || String(item.doctorName || '').toLowerCase().includes(String(user?.name || '').toLowerCase())
-  );
+  const liveAppointments = (collections.appointments || []).filter((item: any) => belongsToDoctor(item, user));
+  const todayLiveAppointments = liveAppointments.filter((item: any) => isTodayRecord(item));
+  const liveConsultations = liveAppointments.filter((item: any) => ['completed', 'arrived', 'confirmed'].includes(String(item.status || '').toLowerCase())).slice(0, 5);
+  const liveDoctorNotes = (collections.notifications || []).filter((n: any) => n.userId === user?.id).slice(0, 5);
+  const liveSchedule = (collections.health_camps || []).slice(0, 3).map((camp: any) => {
+    const d = parseRecordDate(camp);
+    return {
+      day: d ? String(d.getDate()).padStart(2, '0') : '--',
+      month: d ? d.toLocaleDateString('en-GB', { month: 'short' }) : '',
+      title: camp.title || camp.name || 'Camp',
+      location: camp.location || camp.venue || '',
+      time: camp.time || '',
+      color: 'bg-emerald-600',
+    };
+  });
   const livePatients = (collections.patients || []);
   const unreadLive = (collections.notifications || []).filter((n: any) => n.userId === user?.id && !n.read);
 
@@ -1023,7 +1036,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        {livePatients.length || 256}
+                        {livePatients.length}
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         Total Patients
@@ -1047,7 +1060,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        32
+                        {todayLiveAppointments.length}
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         Consultations Today
@@ -1095,7 +1108,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        ₹ 48,750
+                        ₹ 0
                       </div>
                       <div className="text-[10px] font-bold text-slate-600 leading-tight">
                         This Month Earnings
@@ -1133,11 +1146,11 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                   {/* 5 Appointments Rows */}
                   <div className="space-y-2 divide-y divide-slate-100">
-                    {!liveAppointments.length && !todaysAppointments.length && (
+                    {!todayLiveAppointments.length && !todaysAppointments.length && (
                       <div className="text-xs text-slate-500 py-6 text-center">No appointments for today yet.</div>
                     )}
-                    {(liveAppointments.length
-                      ? liveAppointments.map((item: any) => ({
+                    {((todayLiveAppointments.length ? todayLiveAppointments : liveAppointments).length
+                      ? (todayLiveAppointments.length ? todayLiveAppointments : liveAppointments).map((item: any) => ({
                           id: item.id,
                           time: String(item.appointmentTime || item.appointmentDateTime || '10:00').slice(0, 5),
                           period: item.timeSlotPeriod || 'OPD',
@@ -1241,7 +1254,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                         <circle cx="18" cy="18" r="14" fill="none" stroke="#9333ea" strokeWidth="4.5" strokeDasharray="9.68 88" strokeDashoffset="-77.38" />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-                        <span className="text-base font-black text-slate-900 leading-none">356</span>
+                        <span className="text-base font-black text-slate-900 leading-none">{liveAppointments.length}</span>
                         <span className="text-[9px] font-bold text-slate-500 mt-0.5">Total</span>
                       </div>
                     </div>
@@ -1301,7 +1314,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                   </div>
 
                   <div className="space-y-3">
-                    {upcomingSchedule.map((item, idx) => (
+                    {!liveSchedule.length && (
+                      <div className="text-xs text-slate-500 py-4 text-center">No upcoming camps on the roster.</div>
+                    )}
+                    {liveSchedule.map((item, idx) => (
                       <div key={idx} className="flex items-start gap-2.5">
                         <div className="w-11 rounded-lg border border-slate-200 bg-slate-50 text-center py-1 shrink-0 shadow-2xs">
                           <div className="text-xs font-black text-slate-900 leading-none">{item.day}</div>
@@ -1417,7 +1433,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                   </div>
 
                   <div className="space-y-2.5 divide-y divide-slate-100">
-                    {recentConsultations.map((item) => (
+                    {!liveConsultations.length && (
+                      <div className="text-xs text-slate-500 py-4 text-center">No consultations recorded yet.</div>
+                    )}
+                    {liveConsultations.map((item: any) => (
                       <div 
                         key={item.id} 
                         onClick={() => setSelectedConsultationModal(item)}
@@ -1431,20 +1450,20 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                           />
                           <div className="min-w-0 text-left">
                             <div className="text-xs font-bold text-slate-900 leading-tight truncate">
-                              {item.patientName}
+                              {item.patientName || 'Patient'}
                             </div>
                             <div className="text-[9px] text-slate-500 font-medium leading-tight">
-                              {item.date}
+                              {formatApptDate(item)}
                             </div>
                           </div>
                         </div>
 
                         <div className="text-right min-w-0 flex-1 px-2">
                           <div className="text-[10px] font-bold text-slate-800 leading-tight truncate">
-                            {item.primaryFinding}
+                            {item.reason || item.visitType || item.status || 'Consultation'}
                           </div>
                           <div className="text-[9px] text-slate-500 leading-tight truncate">
-                            {item.advice}
+                            {item.hospitalName || item.speciality || ''}
                           </div>
                         </div>
 
@@ -1474,12 +1493,15 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                   </div>
 
                   <div className="space-y-3">
-                    {notifications.map((item) => {
-                      const IconC = item.icon;
+                    {!liveDoctorNotes.length && (
+                      <div className="text-xs text-slate-500 py-4 text-center">No notifications yet.</div>
+                    )}
+                    {liveDoctorNotes.map((item: any) => {
+                      const IconC = Bell;
                       return (
                         <div key={item.id} className="flex items-start justify-between gap-2.5">
                           <div className="flex items-start gap-2.5 min-w-0">
-                            <div className={`w-7 h-7 rounded-md ${item.iconBg} flex items-center justify-center shrink-0 mt-0.5 shadow-2xs`}>
+                            <div className="w-7 h-7 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
                               <IconC className="w-3.5 h-3.5" />
                             </div>
                             <div className="min-w-0 text-left">
@@ -1487,12 +1509,12 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                                 {item.title}
                               </h4>
                               <p className="text-[9.5px] text-slate-500 leading-tight truncate">
-                                {item.subtitle}
+                                {item.body || item.message || ''}
                               </p>
                             </div>
                           </div>
                           <span className="text-[8.5px] font-semibold text-slate-400 shrink-0">
-                            {item.time}
+                            {item.createdAt ? String(item.createdAt).slice(0, 10) : ''}
                           </span>
                         </div>
                       );
@@ -1846,15 +1868,15 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                 <div className="space-y-3">
                   <p className="text-xs text-slate-600">Complete clinical records and findings recorded by Dr. Ravi Teja.</p>
                   <div className="divide-y divide-slate-100">
-                    {recentConsultations.map(c => (
+                    {liveConsultations.map((c: any) => (
                       <div key={c.id} className="py-3 flex items-center justify-between">
                         <div>
-                          <div className="text-xs font-black text-slate-900">{c.patientName}</div>
-                          <div className="text-[11px] text-slate-500">Date: {c.date}</div>
+                          <div className="text-xs font-black text-slate-900">{c.patientName || 'Patient'}</div>
+                          <div className="text-[11px] text-slate-500">Date: {formatApptDate(c)}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-xs font-bold text-blue-700">{c.primaryFinding}</div>
-                          <div className="text-[10px] text-slate-500">{c.advice}</div>
+                          <div className="text-xs font-bold text-blue-700">{c.status || 'Consultation'}</div>
+                          <div className="text-[10px] text-slate-500">{c.reason || c.visitType || ''}</div>
                         </div>
                       </div>
                     ))}
@@ -1867,7 +1889,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                   <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between">
                     <div>
                       <div className="text-xs text-emerald-800 font-bold">Total Earnings This Month</div>
-                      <div className="text-2xl font-black text-emerald-900">₹ 48,750</div>
+                      <div className="text-2xl font-black text-emerald-900">₹ 0</div>
                     </div>
                     <button className="bg-emerald-700 text-white font-bold text-xs px-3 py-2 rounded-lg">Download GST Statement</button>
                   </div>
@@ -2138,10 +2160,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {upcomingSchedule.map((item, idx) => (
+              {liveSchedule.map((item, idx) => (
                 <div key={idx} className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-black text-slate-900">{item.day} {item.month} 2024</span>
+                    <span className="font-black text-slate-900">{item.day} {item.month}</span>
                     <span className={`w-2 h-2 rounded-full ${item.color}`}></span>
                   </div>
                   <div className="font-bold text-slate-800">{item.title}</div>

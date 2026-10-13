@@ -105,7 +105,10 @@ function recordVisible(collection: string, record: any, user: any) {
   const doctorId = user.doctorId;
   const hospitalId = user.hospitalId;
   if (roles.includes('patient')) {
-    return !record.patientId || record.patientId === patientId || record.id === patientId;
+    if (record.patientId) return record.patientId === patientId;
+    if (record.userId) return record.userId === user.id;
+    if (record.patientPhone && user.phone) return String(record.patientPhone) === String(user.phone);
+    return record.id === patientId;
   }
   if (roles.includes('doctor')) {
     return record.doctorId === doctorId || record.id === doctorId || record.userId === user.id;

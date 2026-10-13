@@ -1093,7 +1093,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 <Building2 className="w-5 h-5" />
               </div>
               <div className="mt-3">
-                <div className="text-lg font-black text-slate-900 leading-none">{collections.hospitals.length || stats.hospitals || 345}</div>
+                <div className="text-lg font-black text-slate-900 leading-none">{collections.hospitals.length || stats.hospitals || 0}</div>
                 <div className="text-[11px] font-bold text-slate-600 mt-1">Partner Hospitals</div>
                 <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5 mt-1">
                   <span>↑ 12%</span>
@@ -1522,87 +1522,27 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  
-                  {/* Enquiry 1: Ramesh Kumar */}
-                  <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-[9px] font-black flex items-center justify-center shrink-0">RK</span>
-                      <div>
-                        <div className="font-black text-slate-900 leading-none">Ramesh Kumar</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Heart Problem</div>
+                  {!(collections.enquiries || []).length && !(collections.leads || []).length && (
+                    <div className="text-xs text-slate-500 py-4">No inbound enquiries yet.</div>
+                  )}
+                  {(collections.enquiries?.length ? collections.enquiries : collections.leads || []).slice(0, 5).map((enq: any) => {
+                    const name = enq.name || enq.patientName || 'Enquiry';
+                    return (
+                      <div key={enq.id} className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-[9px] font-black flex items-center justify-center shrink-0">{String(name).slice(0, 2).toUpperCase()}</span>
+                          <div>
+                            <div className="font-black text-slate-900 leading-none">{name}</div>
+                            <div className="text-[10px] text-slate-500 font-medium">{enq.problem || enq.requirement || enq.subject || 'Enquiry'}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10.5px] text-slate-500 font-medium">{enq.location || ''}</span>
+                          <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">{enq.status || 'New'}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10.5px] text-slate-500 font-medium">Warangal</span>
-                      <span className="text-[10px] text-slate-400">9 min ago</span>
-                      <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                    </div>
-                  </div>
-
-                  {/* Enquiry 2: Suresh Babu */}
-                  <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-800 text-[9px] font-black flex items-center justify-center shrink-0">SB</span>
-                      <div>
-                        <div className="font-black text-slate-900 leading-none">Suresh Babu</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Orthopedic Check</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10.5px] text-slate-500 font-medium">Hanamkonda</span>
-                      <span className="text-[10px] text-slate-400">15 min ago</span>
-                      <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                    </div>
-                  </div>
-
-                  {/* Enquiry 3: Anitha Devi */}
-                  <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-800 text-[9px] font-black flex items-center justify-center shrink-0">AD</span>
-                      <div>
-                        <div className="font-black text-slate-900 leading-none">Anitha Devi</div>
-                        <div className="text-[10px] text-slate-500 font-medium">General Checkup</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10.5px] text-slate-500 font-medium">Bhupalpally</span>
-                      <span className="text-[10px] text-slate-400">21 min ago</span>
-                      <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                    </div>
-                  </div>
-
-                  {/* Enquiry 4: Venkatesh */}
-                  <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 text-[9px] font-black flex items-center justify-center shrink-0">VK</span>
-                      <div>
-                        <div className="font-black text-slate-900 leading-none">Venkatesh</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Eye Consultation</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10.5px] text-slate-500 font-medium">Mulugu</span>
-                      <span className="text-[10px] text-slate-400">45 min ago</span>
-                      <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                    </div>
-                  </div>
-
-                  {/* Enquiry 5: Pravalika */}
-                  <div className="flex items-center justify-between text-xs py-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-800 text-[9px] font-black flex items-center justify-center shrink-0">PR</span>
-                      <div>
-                        <div className="font-black text-slate-900 leading-none">Pravalika</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Thyroid Problem</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10.5px] text-slate-500 font-medium">Jangaon</span>
-                      <span className="text-[10px] text-slate-400">1 hr ago</span>
-                      <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">New</span>
-                    </div>
-                  </div>
-
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1623,7 +1563,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-black text-slate-900">Ambulance Bookings</h3>
                   <button 
-                    onClick={() => showToast('Showing 2,145 total ambulance bookings')}
+                    onClick={() => showToast(`${collections.ambulance_bookings.length} ambulance bookings`)}
                     className="text-[11px] font-black text-blue-600 hover:text-blue-800 cursor-pointer"
                   >
                     View All
@@ -2457,44 +2397,31 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 text-xs">
-              {[
-                { name: 'Ramesh Kumar', problem: 'Heart Problem (Chest Discomfort)', location: 'Warangal', time: '9 min ago', phone: '+91 98480 23145', badge: 'New' },
-                { name: 'Suresh Babu', problem: 'Orthopedic Check (Knee Pain)', location: 'Hanamkonda', time: '15 min ago', phone: '+91 94401 88392', badge: 'New' },
-                { name: 'Anitha Devi', problem: 'General Checkup & BP Check', location: 'Bhupalpally', time: '21 min ago', phone: '+91 97012 44321', badge: 'New' },
-                { name: 'Venkatesh', problem: 'Eye Consultation / Cataract', location: 'Mulugu', time: '45 min ago', phone: '+91 99890 12049', badge: 'New' },
-                { name: 'Pravalika', problem: 'Thyroid Problem & Hormone Screening', location: 'Jangaon', time: '1 hr ago', phone: '+91 96180 55432', badge: 'New' },
-                { name: 'Ravi Chandra', problem: 'Nephrology & Dialysis Support', location: 'Mahabubabad', time: '2 hrs ago', phone: '+91 98481 00921', badge: 'In Review' },
-                { name: 'Lakshmi Bai', problem: 'Pediatric Vaccination Inquiry', location: 'Karimnagar', time: '3 hrs ago', phone: '+91 94902 33110', badge: 'Resolved' }
-              ].map((enq, i) => (
-                <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 hover:bg-slate-100/70 transition-colors">
+              {(collections.enquiries?.length ? collections.enquiries : collections.leads || []).map((enq: any) => {
+                const name = enq.name || enq.patientName || 'Enquiry';
+                return (
+                <div key={enq.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 hover:bg-slate-100/70 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 text-xs font-black flex items-center justify-center shrink-0">
-                      {enq.name.slice(0, 2).toUpperCase()}
+                      {String(name).slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-black text-slate-900">{enq.name}</div>
-                      <div className="text-[11px] text-slate-600">{enq.problem}</div>
-                      <div className="text-[10px] text-slate-400 font-medium">Location: {enq.location} • Phone: {enq.phone}</div>
+                      <div className="font-black text-slate-900">{name}</div>
+                      <div className="text-[11px] text-slate-600">{enq.problem || enq.requirement || enq.subject || 'Enquiry'}</div>
+                      <div className="text-[10px] text-slate-400 font-medium">Location: {enq.location || ''} • Phone: {enq.phone || ''}</div>
                     </div>
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className="bg-emerald-50 text-emerald-700 text-[9.5px] font-black px-2 py-0.5 rounded border border-emerald-200">{enq.badge}</span>
-                    <span className="text-[10px] text-slate-400">{enq.time}</span>
-                    <button 
-                      onClick={() => showToast(`Connecting call with ${enq.name}...`)}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Phone className="w-3 h-3" />
-                      <span>Call Back</span>
-                    </button>
+                    <span className="bg-emerald-50 text-emerald-700 text-[9.5px] font-black px-2 py-0.5 rounded border border-emerald-200">{enq.status || 'New'}</span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-              <span className="text-slate-500 font-medium">Showing 7 recent enquiries</span>
+              <span className="text-slate-500 font-medium">Showing live enquiries</span>
               <button
                 onClick={() => setShowViewAllEnquiriesModal(false)}
                 className="bg-[#0f2e5a] hover:bg-[#183d73] text-white text-xs font-black px-4 py-1.5 rounded-lg shadow-2xs cursor-pointer"

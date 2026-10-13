@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLiveData } from '../context/LiveDataContext';
 import { EmptyState } from './EmptyState';
 import { LiveStatusBadge } from './LiveStatusBadge';
+import { belongsToPatient } from '../lib/liveOwnership';
 
 type StatusFilter = 'all' | 'accepted' | 'rejected' | 'pending';
 
@@ -100,15 +101,13 @@ export const PatientMyAppointmentsPage: React.FC = () => {
   const { collections } = useLiveData();
   const [doctorFilter, setDoctorFilter] = useState<StatusFilter>('all');
   const [hospitalFilter, setHospitalFilter] = useState<StatusFilter>('all');
-  const pid = user?.patientId;
-
   const doctorAppointments = useMemo(() => {
-    return (collections.appointments || []).filter((item: any) => !pid || item.patientId === pid);
-  }, [collections.appointments, pid]);
+    return (collections.appointments || []).filter((item: any) => belongsToPatient(item, user));
+  }, [collections.appointments, user]);
 
   const hospitalAppointments = useMemo(() => {
-    return (collections.visit_requests || []).filter((item: any) => !pid || item.patientId === pid);
-  }, [collections.visit_requests, pid]);
+    return (collections.visit_requests || []).filter((item: any) => belongsToPatient(item, user));
+  }, [collections.visit_requests, user]);
 
   const doctorCounts = {
     all: doctorAppointments.length,

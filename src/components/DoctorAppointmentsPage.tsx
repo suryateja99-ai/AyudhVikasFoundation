@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLiveData } from '../context/LiveDataContext';
 import { useAuth } from '../context/AuthContext';
+import { belongsToDoctor } from '../lib/liveOwnership';
 import {
   Calendar,
   CheckCircle2,
@@ -109,9 +110,8 @@ export const DoctorAppointmentsPage: React.FC<DoctorAppointmentsPageProps> = ({
   };
 
   React.useEffect(() => {
-    const doctorId = user?.doctorId;
     const live = (collections.appointments || []).filter((a: any) =>
-      !doctorId || a.doctorId === doctorId
+      belongsToDoctor(a, user)
     );
     setAppointments(() => {
       const mapped = live.map((a: any) => ({
