@@ -330,6 +330,7 @@ export function Fund360Portal() {
             </div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto">
+            <button onClick={() => navigate('/fund360/about')} className="h-9 px-3 rounded-lg text-xs font-black whitespace-nowrap text-emerald-50 hover:bg-emerald-700">About Fund 365</button>
             {tabs.map(([id, label]) => (
               <button
                 key={id}

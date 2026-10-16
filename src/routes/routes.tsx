@@ -22,6 +22,7 @@ import { DonationPage } from '../components/DonationPage';
 import { DonatePromoter } from '../components/DonatePromoter';
 import { RoleDonationShell } from '../components/RoleDonationShell';
 import { Fund360Portal } from '../components/Fund360Portal';
+import { Fund365Explore } from '../components/Fund365Explore';
 import { PartnerWithUsPage } from '../components/PartnerWithUsPage';
 import { BookAppointmentPage } from '../components/BookAppointmentPage';
 import { AmbulanceBookingPage } from '../components/AmbulanceBookingPage';
@@ -50,6 +51,12 @@ const getSavedState = <T,>(key: string, defaultValue: T): T => {
   return defaultValue;
 };
 
+function Fund365Entry({ publicPage }: { publicPage: React.ReactNode }) {
+  const { user, isLoggedIn, loading } = useAuth();
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-emerald-900">Loading FUND 365…</div>;
+  return isLoggedIn && !user?.isGuest ? <Fund360Portal /> : <>{publicPage}</>;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -67,7 +74,7 @@ function DashboardRedirect() {
 function PatientArea(props: {
   patientActiveTab: string;
   setPatientActiveTab: (tab: string) => void;
-  pendingAfterRegister: { type: 'hospital_visit' | 'tab' | 'fund360'; hospitalId?: string; doctorId?: string; tab?: string } | null;
+  pendingAfterRegister: { type: 'hospital_visit' | 'tab' | 'fund360'; hospitalId?: string; doctorId?: string; tab?: string; fundPath?: string } | null;
   onPendingVisitConsumed: () => void;
   onRequireRegister: (hospitalId: string, doctorId?: string) => void;
   onLogout: () => void;
@@ -120,6 +127,7 @@ export const AppRoutes: React.FC = () => {
   const [patientActiveTab, setPatientActiveTab] = useState<string>(() => getSavedState('ayudh_patientActiveTab', 'dashboard'));
   const [pendingAfterRegister, setPendingAfterRegister] = useState<{
     type: 'hospital_visit' | 'tab' | 'fund360';
+    fundPath?: string;
     hospitalId?: string;
     doctorId?: string;
     tab?: string;
@@ -237,12 +245,15 @@ export const AppRoutes: React.FC = () => {
     navigate('/partner-hospitals');
   };
   const handleFund360Entry = () => {
-    if (isLoggedIn && !user?.isGuest) {
-      navigate('/fund360');
-      return;
-    }
-    setPendingAfterRegister({ type: 'fund360' });
+    navigate('/fund360');
+  };
+  const handleFund365Register = (fundPath = '/fund360/onboarding') => {
+    setPendingAfterRegister({ type: 'fund360', fundPath });
     setActiveModal('register_patient');
+  };
+  const handleFund365SignIn = (fundPath = '/fund360/onboarding') => {
+    setPendingAfterRegister({ type: 'fund360', fundPath });
+    navigate('/login');
   };
   const handleBackFromDonation = () => {
     const state = location.state as { from?: string } | null;
@@ -302,7 +313,7 @@ export const AppRoutes: React.FC = () => {
       setPatientActiveTab('find_hospitals');
       navigate('/patient/requests');
     } else if (pendingAfterRegister?.type === 'fund360') {
-      navigate('/fund360/onboarding');
+      navigate(pendingAfterRegister.fundPath || '/fund360/onboarding');
     } else if (pendingAfterRegister?.type === 'tab' && pendingAfterRegister.tab) {
       setPatientActiveTab(pendingAfterRegister.tab);
       navigate(PATIENT_TAB_PATHS[pendingAfterRegister.tab] || '/patient/dashboard');
@@ -460,6 +471,17 @@ export const AppRoutes: React.FC = () => {
     <DonationPage onBackToHome={handleBackFromDonation} />
   );
 
+  const fund365PublicPage = (
+    <>
+      <Fund365Explore
+        isMember={isLoggedIn && !user?.isGuest}
+        onRegister={handleFund365Register}
+        onSignIn={handleFund365SignIn}
+      />
+      {sharedModals}
+    </>
+  );
+
   return (
     <>
       <ScrollToTop />
@@ -468,13 +490,18 @@ export const AppRoutes: React.FC = () => {
         <Route path="/register" element={HomePage} />
         <Route path="/login" element={
           isLoggedIn && !user?.isGuest ? (
-            <Navigate to={roleHome(userRole)} replace />
+            <Navigate to={pendingAfterRegister?.type === 'fund360' ? pendingAfterRegister.fundPath || '/fund360/onboarding' : roleHome(userRole)} replace />
           ) : (
             <div className="min-h-screen bg-slate-100 font-sans text-slate-800 flex flex-col justify-center selection:bg-emerald-500 selection:text-white">
               <LoginPage
                 onBackToHome={handleBackToHome}
                 onOpenModal={handleOpenModal}
-                onLoginSuccess={() => undefined}
+                onLoginSuccess={() => {
+                  if (pendingAfterRegister?.type === 'fund360') {
+                    navigate(pendingAfterRegister.fundPath || '/fund360/onboarding');
+                    setPendingAfterRegister(null);
+                  }
+                }}
                 onRegisterClick={() => {
                   navigate('/register');
                   setActiveModal('register_patient');
@@ -534,17 +561,18 @@ export const AppRoutes: React.FC = () => {
         )} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
 
-        <Route element={<PrivateRoute />}>
-          <Route path="/fund360" element={<Fund360Portal />} />
-          <Route path="/fund360/onboarding" element={<Fund360Portal />} />
-          <Route path="/fund360/dashboard" element={<Fund360Portal />} />
-          <Route path="/fund360/profile" element={<Fund360Portal />} />
-          <Route path="/fund360/finance" element={<Fund360Portal />} />
-          <Route path="/fund360/payments" element={<Fund360Portal />} />
-          <Route path="/fund360/milestones" element={<Fund360Portal />} />
-          <Route path="/fund360/benefits" element={<Fund360Portal />} />
-          <Route path="/fund360/history" element={<Fund360Portal />} />
-        </Route>
+        <Route path="/fund360/about" element={fund365PublicPage} />
+        <Route path="/fund360/participation" element={fund365PublicPage} />
+        <Route path="/fund360/journey" element={fund365PublicPage} />
+        <Route path="/fund360" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/onboarding" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/dashboard" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/profile" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/finance" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/payments" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/milestones" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/benefits" element={<Fund365Entry publicPage={fund365PublicPage} />} />
+        <Route path="/fund360/history" element={<Fund365Entry publicPage={fund365PublicPage} />} />
 
         <Route element={<PrivateRoute requiredRole="patient" />}>
           <Route path="/patient/dashboard" element={<PatientArea {...patientAreaProps} />} />

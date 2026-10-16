@@ -10,6 +10,7 @@ import {
   Heart,
   ShieldCheck,
   Sparkles,
+  HeartHandshake,
 } from 'lucide-react';
 import { ActiveModal } from '../types';
 
@@ -61,7 +62,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
               24/7 GPS-enabled emergency ambulances, diagnostic lab checkups, and free rural health camps across Telangana.
             </p>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 w-full">
+            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-5 gap-2.5 pt-2 w-full lg:w-[calc((100%+1.5rem)*12/7-1.5rem)] lg:max-w-[1060px]">
               <button
                 onClick={() => onOpenModal('register_patient')}
                 className="bg-[#008a00] hover:bg-[#007000] text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-emerald-800 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
@@ -117,6 +118,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenModal, onBecomeM
                 <div className="min-w-0">
                   <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">Emergency Help</div>
                   <div className="text-[10px] font-medium text-red-100 leading-tight mt-0.5">Get Immediate Support</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={onFund360Click}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white p-3 rounded-lg flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all border border-emerald-900 text-left group cursor-pointer min-h-[76px] min-w-0 h-full"
+              >
+                <div className="w-9 h-9 rounded-md bg-white/20 flex items-center justify-center shrink-0">
+                  <HeartHandshake className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] sm:text-[11px] font-black uppercase leading-tight text-white">FUND 365</div>
+                  <div className="text-[10px] font-medium text-emerald-100 leading-tight mt-0.5">Explore & Participate</div>
                 </div>
               </button>
             </div>
